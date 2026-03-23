@@ -1,0 +1,47 @@
+{
+  "width": 72,
+  "position": "left",
+  "autostart": true,
+  "projects": [
+    {
+      "id": "nsi-toolbox",
+      "label": "Toolbox",
+      "icon": "🧰",
+      "color": "#3B82F6",
+      "windowTitle": "NSIToolbox",
+      "hotkey": "Alt+1"
+    },
+    {
+      "id": "nsi-dashboard",
+      "label": "Dashboard",
+      "icon": "📊",
+      "color": "#8B5CF6",
+      "windowTitle": "NSIProjectDashboard",
+      "hotkey": "Alt+2"
+    },
+    {
+      "id": "nsi-sync",
+      "label": "BC Sync",
+      "icon": "🔄",
+      "color": "#10B981",
+      "windowTitle": "NSISyncBCDataverse",
+      "hotkey": "Alt+3"
+    },
+    {
+      "id": "liri-pp",
+      "label": "PP Mgr",
+      "icon": "⚡",
+      "color": "#F59E0B",
+      "windowTitle": "liri-pp-solution-manager",
+      "hotkey": "Alt+4"
+    },
+    {
+      "id": "nsi-proxy",
+      "label": "Proxy",
+      "icon": "🔌",
+      "color": "#EF4444",
+      "windowTitle": "NSIProxyServer",
+      "hotkey": "Alt+5"
+    }
+  ]
+}
