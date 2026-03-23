@@ -2,11 +2,85 @@ const { app, BrowserWindow, ipcMain, globalShortcut, screen, Tray, Menu, nativeI
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const koffi = require('koffi');
 
 let mainWindow;
 let tray;
 let config;
-let checkingActiveWindow = false;
+
+// ── Win32 API ─────────────────────────────────────────────────────────────────
+
+const user32 = koffi.load('user32.dll');
+const kernel32 = koffi.load('kernel32.dll');
+
+const WNDENUMPROC = koffi.proto('bool __stdcall WNDENUMPROC(void* hWnd, void* lParam)');
+
+const _EnumWindows           = user32.func('bool    __stdcall EnumWindows(WNDENUMPROC* lpEnumFunc, void* lParam)');
+const _IsWindowVisible       = user32.func('bool    __stdcall IsWindowVisible(void* hWnd)');
+const _GetWindowTextW        = user32.func('int     __stdcall GetWindowTextW(void* hWnd, void* lpString, int nMaxCount)');
+const _SetForegroundWindow   = user32.func('bool    __stdcall SetForegroundWindow(void* hWnd)');
+const _BringWindowToTop      = user32.func('bool    __stdcall BringWindowToTop(void* hWnd)');
+const _ShowWindow            = user32.func('bool    __stdcall ShowWindow(void* hWnd, int nCmdShow)');
+const _IsIconic              = user32.func('bool    __stdcall IsIconic(void* hWnd)');
+const _GetForegroundWindow   = user32.func('void*   __stdcall GetForegroundWindow()');
+const _GetWindowThreadProcessId = user32.func('uint32 __stdcall GetWindowThreadProcessId(void* hWnd, void* lpdwProcessId)');
+const _AttachThreadInput     = user32.func('bool    __stdcall AttachThreadInput(uint32 idAttach, uint32 idAttachTo, bool fAttach)');
+const _GetCurrentThreadId    = kernel32.func('uint32 __stdcall GetCurrentThreadId()');
+
+function getWindowTitle(hwnd) {
+  const buf = Buffer.alloc(1024);
+  const len = _GetWindowTextW(hwnd, buf, 512);
+  if (len <= 0) return '';
+  return buf.slice(0, len * 2).toString('utf16le');
+}
+
+function findWindowByTitle(fragment) {
+  let found = null;
+  const cb = koffi.register((hwnd, _lParam) => {
+    if (!_IsWindowVisible(hwnd)) return true;
+    const title = getWindowTitle(hwnd);
+    if (title.includes(fragment)) {
+      found = hwnd;
+      return false; // stop enumeration
+    }
+    return true;
+  }, koffi.pointer(WNDENUMPROC));
+  _EnumWindows(cb, null);
+  koffi.unregister(cb);
+  return found;
+}
+
+function focusWindowByTitle(titleFragment) {
+  const hwnd = findWindowByTitle(titleFragment);
+  if (!hwnd) return { success: false, reason: 'notfound' };
+
+  if (_IsIconic(hwnd)) _ShowWindow(hwnd, 9); // SW_RESTORE
+
+  // AttachThreadInput trick: bypass Windows' focus-stealing prevention
+  const fg = _GetForegroundWindow();
+  const fgThread = fg ? _GetWindowThreadProcessId(fg, null) : 0;
+  const myThread = _GetCurrentThreadId();
+  if (fgThread && fgThread !== myThread) {
+    _AttachThreadInput(myThread, fgThread, true);
+    _SetForegroundWindow(hwnd);
+    _BringWindowToTop(hwnd);
+    _AttachThreadInput(myThread, fgThread, false);
+  } else {
+    _SetForegroundWindow(hwnd);
+    _BringWindowToTop(hwnd);
+  }
+
+  return { success: true, title: `focused:${getWindowTitle(hwnd)}` };
+}
+
+// ── Window focused state polling ──────────────────────────────────────────────
+
+function checkActiveWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const hwnd = _GetForegroundWindow();
+  const title = hwnd ? getWindowTitle(hwnd) : '';
+  mainWindow.webContents.send('active-window', title);
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -30,57 +104,6 @@ function loadConfig() {
 
 function getConfigPath() {
   return path.join(app.getPath('userData'), 'config.json');
-}
-
-// ── Window Focus (PowerShell) ─────────────────────────────────────────────────
-
-function focusWindowByTitle(titleFragment) {
-  // Uses PowerShell to find and focus any window whose title contains the fragment
-  const script = `
-    Add-Type @"
-      using System;
-      using System.Runtime.InteropServices;
-      public class Win32 {
-        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-      }
-"@
-    $procs = Get-Process | Where-Object { $_.MainWindowTitle -like '*${titleFragment}*' -and $_.MainWindowHandle -ne 0 }
-    if ($procs) {
-      $hwnd = $procs[0].MainWindowHandle
-      if ([Win32]::IsIconic($hwnd)) { [Win32]::ShowWindow($hwnd, 9) }
-      [Win32]::SetForegroundWindow($hwnd)
-      Write-Output "focused:$($procs[0].MainWindowTitle)"
-    } else {
-      Write-Output "notfound"
-    }
-  `;
-
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  return new Promise((resolve) => {
-    exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, (err, stdout) => {
-      if (err) { resolve({ success: false, reason: err.message }); return; }
-      const out = stdout.trim();
-      resolve({ success: out.startsWith('focused:'), title: out });
-    });
-  });
-}
-
-// ── Window focused state polling ──────────────────────────────────────────────
-
-function checkActiveWindow() {
-  if (!mainWindow || mainWindow.isDestroyed() || checkingActiveWindow) return;
-  checkingActiveWindow = true;
-
-  const script = `(Get-Process | Where-Object { $_.MainWindowHandle -eq (Add-Type -PassThru -Name 'FG' -MemberDefinition '[DllImport(""user32.dll"")] public static extern IntPtr GetForegroundWindow();' )::GetForegroundWindow() }).MainWindowTitle`;
-
-  exec(`powershell -NoProfile -NonInteractive -Command "${script}"`, (err, stdout) => {
-    checkingActiveWindow = false;
-    if (!err && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('active-window', stdout.trim());
-    }
-  });
 }
 
 // ── Create Window ─────────────────────────────────────────────────────────────
@@ -140,8 +163,8 @@ function registerHotkeys() {
   config.projects.forEach((project) => {
     if (!project.hotkey) return;
     try {
-      globalShortcut.register(project.hotkey, async () => {
-        const result = await focusWindowByTitle(project.windowTitle);
+      globalShortcut.register(project.hotkey, () => {
+        const result = focusWindowByTitle(project.windowTitle);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('focus-result', { id: project.id, ...result });
         }
@@ -156,7 +179,7 @@ function registerHotkeys() {
 
 ipcMain.handle('get-config', () => config);
 
-ipcMain.handle('focus-project', async (_, projectId) => {
+ipcMain.handle('focus-project', (_, projectId) => {
   const project = config.projects.find(p => p.id === projectId);
   if (!project) return { success: false, reason: 'Project not found' };
   return focusWindowByTitle(project.windowTitle);
@@ -166,19 +189,9 @@ ipcMain.handle('open-config', () => {
   exec(`explorer "${getConfigPath()}"`);
 });
 
-ipcMain.handle('check-active-window', async () => {
-  return new Promise((resolve) => {
-    const script = `
-      Add-Type -Name 'FG' -Namespace '' -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();' -ErrorAction SilentlyContinue
-      $hwnd = [FG]::GetForegroundWindow()
-      $proc = Get-Process | Where-Object { $_.MainWindowHandle -eq $hwnd } | Select-Object -First 1
-      Write-Output $proc.MainWindowTitle
-    `;
-    const encoded = Buffer.from(script, 'utf16le').toString('base64');
-    exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, (err, stdout) => {
-      resolve(stdout.trim());
-    });
-  });
+ipcMain.handle('check-active-window', () => {
+  const hwnd = _GetForegroundWindow();
+  return hwnd ? getWindowTitle(hwnd) : '';
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
@@ -189,8 +202,8 @@ app.whenReady().then(() => {
   createTray();
   registerHotkeys();
 
-  // Poll active window every 1500ms to highlight active project
-  setInterval(checkActiveWindow, 1500);
+  // Poll active window every 500ms to highlight active project
+  setInterval(checkActiveWindow, 500);
 });
 
 app.on('will-quit', () => {

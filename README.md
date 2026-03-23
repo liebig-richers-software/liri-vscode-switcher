@@ -90,7 +90,7 @@ After editing `config.json`, use the tray menu → **Reload Config** — no rest
 
 ## How it works
 
-Window focusing uses a PowerShell snippet that calls `SetForegroundWindow` via Win32 P/Invoke. This works reliably across minimized windows and virtual desktops, without needing elevated permissions.
+Window focusing calls Win32 APIs (`EnumWindows`, `SetForegroundWindow`, `AttachThreadInput`) directly from the Electron main process via [koffi](https://koffi.dev/). No PowerShell spawning — instant and reliable across minimized windows, without elevated permissions.
 
 ## Roadmap
 

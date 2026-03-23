@@ -8,11 +8,19 @@
     "start": "electron .",
     "build": "electron-builder"
   },
-  "keywords": ["vscode", "productivity", "window-manager", "developer-tools"],
+  "keywords": [
+    "vscode",
+    "productivity",
+    "window-manager",
+    "developer-tools"
+  ],
   "author": "Liebig Richers Software",
   "license": "MIT",
   "pnpm": {
-    "onlyBuiltDependencies": ["electron"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "koffi"
+    ]
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -29,5 +37,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "dependencies": {
+    "koffi": "^2.15.2"
   }
 }
