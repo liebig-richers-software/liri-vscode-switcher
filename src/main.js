@@ -6,6 +6,7 @@ const fs = require('fs');
 let mainWindow;
 let tray;
 let config;
+let checkingActiveWindow = false;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -56,8 +57,9 @@ function focusWindowByTitle(titleFragment) {
     }
   `;
 
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
   return new Promise((resolve) => {
-    exec(`powershell -NoProfile -NonInteractive -Command "${script.replace(/\n/g, ' ')}"`, (err, stdout) => {
+    exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, (err, stdout) => {
       if (err) { resolve({ success: false, reason: err.message }); return; }
       const out = stdout.trim();
       resolve({ success: out.startsWith('focused:'), title: out });
@@ -68,11 +70,13 @@ function focusWindowByTitle(titleFragment) {
 // ── Window focused state polling ──────────────────────────────────────────────
 
 function checkActiveWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed() || checkingActiveWindow) return;
+  checkingActiveWindow = true;
 
   const script = `(Get-Process | Where-Object { $_.MainWindowHandle -eq (Add-Type -PassThru -Name 'FG' -MemberDefinition '[DllImport(""user32.dll"")] public static extern IntPtr GetForegroundWindow();' )::GetForegroundWindow() }).MainWindowTitle`;
 
   exec(`powershell -NoProfile -NonInteractive -Command "${script}"`, (err, stdout) => {
+    checkingActiveWindow = false;
     if (!err && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('active-window', stdout.trim());
     }
@@ -170,7 +174,8 @@ ipcMain.handle('check-active-window', async () => {
       $proc = Get-Process | Where-Object { $_.MainWindowHandle -eq $hwnd } | Select-Object -First 1
       Write-Output $proc.MainWindowTitle
     `;
-    exec(`powershell -NoProfile -NonInteractive -Command "${script.replace(/\n/g, ' ')}"`, (err, stdout) => {
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, (err, stdout) => {
       resolve(stdout.trim());
     });
   });
@@ -184,8 +189,8 @@ app.whenReady().then(() => {
   createTray();
   registerHotkeys();
 
-  // Poll active window every 500ms to highlight active project
-  setInterval(checkActiveWindow, 500);
+  // Poll active window every 1500ms to highlight active project
+  setInterval(checkActiveWindow, 1500);
 });
 
 app.on('will-quit', () => {
