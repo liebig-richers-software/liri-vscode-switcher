@@ -79,11 +79,25 @@ function focusWindowByTitle(titleFragment) {
 
 // ── Window focused state polling ──────────────────────────────────────────────
 
+function getOpenProjectIds() {
+    const visibleTitles = [];
+    const cb = koffi.register((hwnd, _lParam) => {
+        if (!_IsWindowVisible(hwnd)) return true;
+        const title = getWindowTitle(hwnd);
+        if (title) visibleTitles.push(title);
+        return true;
+    }, koffi.pointer(WNDENUMPROC));
+    _EnumWindows(cb, null);
+    koffi.unregister(cb);
+    return config.projects.filter((p) => visibleTitles.some((t) => t.includes(p.windowTitle))).map((p) => p.id);
+}
+
 function checkActiveWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const hwnd = _GetForegroundWindow();
     const title = hwnd ? getWindowTitle(hwnd) : "";
-    mainWindow.webContents.send("active-window", title);
+    const openIds = getOpenProjectIds();
+    mainWindow.webContents.send("active-window", { title, openIds });
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -215,7 +229,9 @@ ipcMain.on("set-ignore-mouse", (_, ignore) => {
 
 ipcMain.handle("check-active-window", () => {
     const hwnd = _GetForegroundWindow();
-    return hwnd ? getWindowTitle(hwnd) : "";
+    const title = hwnd ? getWindowTitle(hwnd) : "";
+    const openIds = getOpenProjectIds();
+    return { title, openIds };
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────

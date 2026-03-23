@@ -158,6 +158,18 @@
                 box-shadow: 0 0 8px var(--project-color);
             }
 
+            /* Unavailable (window not open) */
+            .project-btn.unavailable {
+                opacity: 0.3;
+                cursor: default;
+            }
+            .project-btn.unavailable:hover::before {
+                opacity: 0;
+            }
+            .project-btn.unavailable:active {
+                transform: none;
+            }
+
             /* Not-found flash */
             .project-btn.not-found {
                 animation: shake 0.3s ease;
@@ -280,6 +292,7 @@
         <script>
             let config = null;
             let activeWindowTitle = "";
+            let openProjectIds = [];
 
             function colorWithAlpha(hex, alpha) {
                 const r = parseInt(hex.slice(1, 3), 16);
@@ -304,12 +317,16 @@
             function updateActiveStates() {
                 const activeId = getActiveProjectId();
                 document.querySelectorAll(".project-btn").forEach((btn) => {
+                    const available = openProjectIds.includes(btn.dataset.id);
                     btn.classList.toggle("active", btn.dataset.id === activeId);
+                    btn.classList.toggle("unavailable", !available);
+                    btn.disabled = !available;
                 });
             }
 
             async function focusProject(id) {
                 const btn = document.querySelector(`.project-btn[data-id="${id}"]`);
+                if (btn?.disabled) return;
                 const result = await window.switcher.focusProject(id);
                 if (!result.success && btn) {
                     btn.classList.add("not-found");
@@ -373,14 +390,17 @@
                 renderSidebar();
 
                 // Initial active window check
-                activeWindowTitle = await window.switcher.checkActiveWindow();
+                const initial = await window.switcher.checkActiveWindow();
+                activeWindowTitle = initial.title;
+                openProjectIds = initial.openIds;
                 updateActiveStates();
             }
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
-            window.switcher.onActiveWindow((title) => {
+            window.switcher.onActiveWindow(({ title, openIds }) => {
                 activeWindowTitle = title;
+                openProjectIds = openIds;
                 updateActiveStates();
             });
 
