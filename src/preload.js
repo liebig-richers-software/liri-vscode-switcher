@@ -9,4 +9,6 @@ contextBridge.exposeInMainWorld("switcher", {
     onConfigUpdated: (cb) => ipcRenderer.on("config-updated", (_, cfg) => cb(cfg)),
     onFocusResult: (cb) => ipcRenderer.on("focus-result", (_, result) => cb(result)),
     setIgnoreMouse: (ignore) => ipcRenderer.send("set-ignore-mouse", ignore),
+    moveWindow: (y) => ipcRenderer.send("move-window", y),
+    saveWindowY: (y) => ipcRenderer.send("save-window-y", y),
 });

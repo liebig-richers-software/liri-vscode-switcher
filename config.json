@@ -1,5 +1,6 @@
 {
   "width": 72,
+  "barOffsetY": 0.5,
   "position": "left",
   "autostart": true,
   "projects": [

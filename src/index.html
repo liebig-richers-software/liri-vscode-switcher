@@ -73,11 +73,14 @@
                 margin-bottom: 8px;
                 flex-shrink: 0;
                 -webkit-app-region: no-drag;
-                cursor: pointer;
+                cursor: grab;
                 transition: background 0.2s;
             }
             .logo:hover {
                 background: rgba(255, 255, 255, 0.1);
+            }
+            .logo.dragging {
+                cursor: grabbing;
             }
 
             /* Divider */
@@ -265,7 +268,7 @@
                 transition: all 0.15s;
                 -webkit-app-region: no-drag;
                 flex-shrink: 0;
-                margin-top: auto;
+                margin-top: 8px;
             }
             .settings-btn:hover {
                 color: var(--text-bright);
@@ -380,6 +383,7 @@
                 settingsBtn.addEventListener("click", () => window.switcher.openConfig());
                 sidebar.appendChild(settingsBtn);
 
+                initDrag(logo);
                 updateActiveStates();
             }
 
@@ -454,6 +458,32 @@
             // doesn't fire (e.g. after SetForegroundWindow transfers focus).
             sidebar.addEventListener("mouseenter", () => clearTimeout(hideTimer));
             sidebar.addEventListener("mouseleave", scheduleHide);
+
+            // ── Drag to reposition ────────────────────────────────────────────────────
+
+            function initDrag(logo) {
+                logo.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    logo.classList.add("dragging");
+                    const startMouseY = e.screenY;
+                    const startWinY = window.screenY;
+
+                    const onMove = (e) => {
+                        const newY = startWinY + (e.screenY - startMouseY);
+                        window.switcher.moveWindow(newY);
+                    };
+
+                    const onUp = () => {
+                        logo.classList.remove("dragging");
+                        window.switcher.saveWindowY(window.screenY);
+                        document.removeEventListener("mousemove", onMove);
+                        document.removeEventListener("mouseup", onUp);
+                    };
+
+                    document.addEventListener("mousemove", onMove);
+                    document.addEventListener("mouseup", onUp);
+                });
+            }
 
             // ── Init ──────────────────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ const koffi = require("koffi");
 let mainWindow;
 let tray;
 let config;
+let barHeight;
 
 // ── Win32 API ─────────────────────────────────────────────────────────────────
 
@@ -134,15 +135,25 @@ function getConfigPath() {
 
 function createWindow() {
     const display = screen.getPrimaryDisplay();
-    const { height } = display.workAreaSize;
+    const { height: screenHeight } = display.workAreaSize;
 
     const barWidth = config.width || 72;
+    // Height: top padding + logo + divider + N buttons + settings + bottom padding
+    const n = config.projects.length;
+    barHeight = 12 + 36 + 8 + 9 + n * 52 + (n - 1) * 6 + 8 + 36 + 8;
+    let clampedY;
+    if (config.barY != null) {
+        clampedY = Math.max(0, Math.min(config.barY, screenHeight - barHeight));
+    } else {
+        const offsetY = config.barOffsetY ?? 0;
+        clampedY = Math.max(0, Math.min(Math.round(screenHeight * offsetY - barHeight / 2), screenHeight - barHeight));
+    }
 
     mainWindow = new BrowserWindow({
         width: barWidth,
-        height: height,
+        height: barHeight,
         x: 0,
-        y: 0,
+        y: clampedY,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -231,6 +242,19 @@ ipcMain.on("set-ignore-mouse", (_, ignore) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
     }
+});
+
+ipcMain.on("move-window", (_, y) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const barWidth = config.width || 72;
+    const clampedY = Math.max(0, Math.min(y, screenHeight - barHeight));
+    mainWindow.setBounds({ x: 0, y: clampedY, width: barWidth, height: barHeight });
+});
+
+ipcMain.on("save-window-y", (_, y) => {
+    config.barY = y;
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 });
 
 ipcMain.handle("check-active-window", () => {
