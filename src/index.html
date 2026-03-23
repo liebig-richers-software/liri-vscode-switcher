@@ -40,6 +40,14 @@
       gap: 4px;
       font-family: var(--font);
       -webkit-app-region: drag;
+      transform: translateX(calc(-100% + 3px));
+      opacity: 0;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    #sidebar.visible {
+      transform: translateX(0);
+      opacity: 1;
     }
 
     /* Top logo mark */
@@ -364,6 +372,40 @@
         }
       }
     });
+
+    // ── Auto-hide ─────────────────────────────────────────────────────────────
+
+    let hideTimer = null;
+    let sidebarVisible = false;
+    const sidebar = document.getElementById('sidebar');
+
+    function showSidebar() {
+      clearTimeout(hideTimer);
+      if (!sidebarVisible) {
+        sidebarVisible = true;
+        window.switcher.setIgnoreMouse(false);
+        sidebar.classList.add('visible');
+      }
+    }
+
+    function scheduleHide() {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        sidebarVisible = false;
+        sidebar.classList.remove('visible');
+        window.switcher.setIgnoreMouse(true);
+      }, 500);
+    }
+
+    // mousemove fires even when setIgnoreMouseEvents(true, {forward:true}).
+    // Only trigger when cursor is at the very left screen edge (clientX <= 1).
+    document.addEventListener('mousemove', (e) => {
+      if (!sidebarVisible && e.clientX <= 1) showSidebar();
+    });
+    sidebar.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+    sidebar.addEventListener('mouseleave', scheduleHide);
+
+    // ── Init ──────────────────────────────────────────────────────────────────
 
     init();
   </script>

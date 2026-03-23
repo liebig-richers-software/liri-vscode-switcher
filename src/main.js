@@ -136,8 +136,8 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
 
-  // Allow click-through on transparent areas but capture button clicks
-  mainWindow.setIgnoreMouseEvents(false);
+  // Start with click-through; renderer toggles this on hover
+  mainWindow.setIgnoreMouseEvents(true, { forward: true });
 }
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
@@ -187,6 +187,12 @@ ipcMain.handle('focus-project', (_, projectId) => {
 
 ipcMain.handle('open-config', () => {
   exec(`explorer "${getConfigPath()}"`);
+});
+
+ipcMain.on('set-ignore-mouse', (_, ignore) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
+  }
 });
 
 ipcMain.handle('check-active-window', () => {
