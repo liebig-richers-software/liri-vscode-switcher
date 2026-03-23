@@ -453,6 +453,7 @@
             });
             sidebar.addEventListener("mouseenter", () => clearTimeout(hideTimer));
             sidebar.addEventListener("mouseleave", scheduleHide);
+            document.addEventListener("mouseleave", scheduleHide);
 
             // ── Init ──────────────────────────────────────────────────────────────────
 
