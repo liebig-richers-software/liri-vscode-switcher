@@ -97,7 +97,13 @@ function checkActiveWindow() {
     const hwnd = _GetForegroundWindow();
     const title = hwnd ? getWindowTitle(hwnd) : "";
     const openIds = getOpenProjectIds();
-    mainWindow.webContents.send("active-window", { title, openIds });
+
+    const cursor = screen.getCursorScreenPoint();
+    const [wx, wy] = mainWindow.getPosition();
+    const [ww, wh] = mainWindow.getSize();
+    const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
+
+    mainWindow.webContents.send("active-window", { title, openIds, cursorInWindow });
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

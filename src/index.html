@@ -332,9 +332,6 @@
                     btn.classList.add("not-found");
                     setTimeout(() => btn.classList.remove("not-found"), 400);
                 }
-                // After focusing another window, mouse events may stop arriving —
-                // schedule hide so the sidebar doesn't stay open indefinitely.
-                scheduleHide();
             }
 
             function renderSidebar() {
@@ -401,10 +398,11 @@
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
-            window.switcher.onActiveWindow(({ title, openIds }) => {
+            window.switcher.onActiveWindow(({ title, openIds, cursorInWindow }) => {
                 activeWindowTitle = title;
                 openProjectIds = openIds;
                 updateActiveStates();
+                if (sidebarVisible && !cursorInWindow) scheduleHide();
             });
 
             window.switcher.onConfigUpdated((newConfig) => {
@@ -451,9 +449,11 @@
             document.addEventListener("mousemove", (e) => {
                 if (!sidebarVisible && e.clientX <= 1) showSidebar();
             });
+            // Fast path: react immediately on leave. The active-window poll
+            // (every 500ms) is the reliable fallback for cases where mouseleave
+            // doesn't fire (e.g. after SetForegroundWindow transfers focus).
             sidebar.addEventListener("mouseenter", () => clearTimeout(hideTimer));
             sidebar.addEventListener("mouseleave", scheduleHide);
-            document.addEventListener("mouseleave", scheduleHide);
 
             // ── Init ──────────────────────────────────────────────────────────────────
 
