@@ -332,6 +332,9 @@
                     btn.classList.add("not-found");
                     setTimeout(() => btn.classList.remove("not-found"), 400);
                 }
+                // After focusing another window, mouse events may stop arriving —
+                // schedule hide so the sidebar doesn't stay open indefinitely.
+                scheduleHide();
             }
 
             function renderSidebar() {
