@@ -200,10 +200,50 @@
                 outline: none;
             }
 
-            .icon-input {
-                text-align: center;
+            .icon-btn {
+                width: 100%;
+                height: 28px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                cursor: pointer;
                 font-size: 17px;
-                padding: 3px 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: border-color 0.15s;
+            }
+            .icon-btn:hover { border-color: var(--border-focus); }
+
+            /* Icon picker popup */
+            .icon-picker {
+                position: fixed;
+                background: #1a1a24;
+                border: 1px solid var(--border-focus);
+                border-radius: 8px;
+                padding: 8px;
+                display: grid;
+                grid-template-columns: repeat(10, 28px);
+                gap: 4px;
+                z-index: 1000;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            }
+            .icon-picker button {
+                width: 28px;
+                height: 28px;
+                background: none;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 15px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.1s;
+            }
+            .icon-picker button:hover {
+                background: rgba(255,255,255,0.1);
+                border-color: rgba(255,255,255,0.2);
             }
 
             /* ── Delete button ── */
@@ -274,6 +314,69 @@
         <script>
             let config = null;
 
+            const ICONS = [
+                // Files & data
+                "📁","📂","🗂️","📦","📄","📃","📋","📊","📈","📉",
+                "🗃️","💾","📑","📒","📓","📔","📕","📗","📘","📙",
+                // Dev & hardware
+                "💻","🖥️","⌨️","🖱️","🖨️","📱","📲","🔌","🔋","💡",
+                // Tools
+                "🔧","🔨","🛠️","⚙️","🧰","🪛","🪚","🔗","📎","🧲",
+                // Web & network
+                "🌐","☁️","🌍","🌎","🌏","📡","🔭","🛰️","📶","🔒",
+                // Code & tech
+                "🤖","🦾","🧩","🎮","🕹️","⚡","🔥","🚀","🎯","🏗️",
+                // Actions & status
+                "🔄","♻️","✅","❌","⚠️","🚦","🚧","🔴","🟢","🟡",
+                // Science & art
+                "🧪","🧬","🔬","🎨","🖌️","✏️","📝","🖊️","📐","📏",
+                // Security & comms
+                "🔑","🗝️","🛡️","🔐","💬","📬","📨","🔔","📢","📣",
+                // Misc & symbols
+                "⭐","🌟","💫","✨","🏆","🥇","🎁","🏠","🏢","🏭",
+            ];
+
+            let activePicker = null;
+
+            function openIconPicker(btn) {
+                if (activePicker) { activePicker.remove(); activePicker = null; }
+
+                const picker = document.createElement("div");
+                picker.className = "icon-picker";
+
+                ICONS.forEach(icon => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.textContent = icon;
+                    b.addEventListener("click", () => {
+                        btn.textContent = icon;
+                        btn.dataset.value = icon;
+                        picker.remove();
+                        activePicker = null;
+                    });
+                    picker.appendChild(b);
+                });
+
+                document.body.appendChild(picker);
+                activePicker = picker;
+
+                // Position below the button
+                const rect = btn.getBoundingClientRect();
+                picker.style.top = (rect.bottom + 4) + "px";
+                picker.style.left = rect.left + "px";
+
+                // Close on outside click
+                setTimeout(() => {
+                    document.addEventListener("click", function close(e) {
+                        if (!picker.contains(e.target) && e.target !== btn) {
+                            picker.remove();
+                            activePicker = null;
+                            document.removeEventListener("click", close);
+                        }
+                    });
+                }, 0);
+            }
+
             function esc(s) {
                 return String(s ?? "")
                     .replace(/&/g, "&amp;")
@@ -285,14 +388,25 @@
                 const row = document.createElement("div");
                 row.className = "project-row" + (isNew ? " new-row" : "");
                 row.dataset.id = project.id || "";
+
+                const icon = project.icon ?? "📁";
+                const iconBtn = document.createElement("button");
+                iconBtn.type = "button";
+                iconBtn.className = "icon-btn";
+                iconBtn.title = "Choose icon";
+                iconBtn.textContent = icon;
+                iconBtn.dataset.value = icon;
+                iconBtn.addEventListener("click", () => openIconPicker(iconBtn));
+
                 row.innerHTML = `
-                    <input class="icon-input" type="text" value="${esc(project.icon ?? "📁")}" maxlength="4" title="Icon (emoji)">
+                    <span></span>
                     <input type="text" value="${esc(project.label)}" placeholder="Label">
                     <input type="text" value="${esc(project.windowTitle)}" placeholder="Part of VS Code window title">
                     <input type="color" value="${esc(project.color ?? "#3b82f6")}">
                     <input type="text" value="${esc(project.hotkey)}" placeholder="e.g. Alt+1">
                     <button class="delete-btn" title="Remove" onclick="this.closest('.project-row').remove()">✕</button>
                 `;
+                row.firstElementChild.replaceWith(iconBtn);
                 return row;
             }
 
@@ -301,23 +415,24 @@
                 const row = makeRow(prefill, true);
                 list.appendChild(row);
                 row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                row.querySelectorAll("input")[1].focus();
+                row.querySelectorAll("input")[0].focus();
             }
 
             function collectProjects() {
                 return [...document.querySelectorAll(".project-row")]
                     .map((row) => {
+                        const iconBtn = row.querySelector(".icon-btn");
                         const inputs = row.querySelectorAll("input");
-                        const label = inputs[1].value.trim();
-                        const windowTitle = inputs[2].value.trim();
+                        const label = inputs[0].value.trim();
+                        const windowTitle = inputs[1].value.trim();
                         if (!label || !windowTitle) return null;
                         return {
                             id: row.dataset.id || label.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now().toString(36),
-                            icon: inputs[0].value.trim() || "📁",
+                            icon: iconBtn?.dataset.value || iconBtn?.textContent || "📁",
                             label,
                             windowTitle,
-                            color: inputs[3].value,
-                            hotkey: inputs[4].value.trim() || undefined,
+                            color: inputs[2].value,
+                            hotkey: inputs[3].value.trim() || undefined,
                         };
                     })
                     .filter(Boolean);
