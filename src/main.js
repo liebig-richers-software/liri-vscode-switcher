@@ -228,10 +228,8 @@ function createConfigWindow(prefill = null) {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 
-function createTray() {
-    const img = nativeImage.createEmpty();
-    tray = new Tray(img);
-    tray.setToolTip("VSCode Switcher");
+function buildTrayMenu() {
+    const openAtLogin = app.getLoginItemSettings().openAtLogin;
     tray.setContextMenu(
         Menu.buildFromTemplate([
             { label: "Configure", click: () => createConfigWindow() },
@@ -244,9 +242,83 @@ function createTray() {
                 },
             },
             { type: "separator" },
+            {
+                label: "Start with Windows",
+                type: "checkbox",
+                checked: openAtLogin,
+                click: () => {
+                    app.setLoginItemSettings({ openAtLogin: !openAtLogin });
+                    buildTrayMenu();
+                },
+            },
+            { type: "separator" },
             { label: "Quit", click: () => app.quit() },
         ]),
     );
+}
+
+function makeTrayIconBuffer() {
+    const zlib = require("zlib");
+
+    function crc32(buf) {
+        const table = [];
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            table[n] = c;
+        }
+        let crc = 0xffffffff;
+        for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+        return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function chunk(type, data) {
+        const typeBytes = Buffer.from(type, "ascii");
+        const len = Buffer.alloc(4);
+        len.writeUInt32BE(data.length);
+        const crcInput = Buffer.concat([typeBytes, data]);
+        const crcBuf = Buffer.alloc(4);
+        crcBuf.writeUInt32BE(crc32(crcInput));
+        return Buffer.concat([len, typeBytes, data, crcBuf]);
+    }
+
+    // IHDR: 16×16, 8-bit RGBA
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(16, 0);
+    ihdr.writeUInt32BE(16, 4);
+    ihdr[8] = 8; ihdr[9] = 6; // bit depth, color type RGBA
+
+    // Draw a simple ">" arrow icon: VS Code blue bg, white chevron
+    const rows = [];
+    for (let y = 0; y < 16; y++) {
+        const row = Buffer.alloc(65); // filter byte + 16 RGBA pixels
+        for (let x = 0; x < 16; x++) {
+            const mid = 7.5, half = Math.abs(y - mid);
+            const onChevron = (x === Math.round(4 + half) || x === Math.round(4 + half - 1)) && half <= 6;
+            const i = 1 + x * 4;
+            if (onChevron) {
+                row[i] = 0xff; row[i + 1] = 0xff; row[i + 2] = 0xff; row[i + 3] = 0xff;
+            } else {
+                row[i] = 0x00; row[i + 1] = 0x7a; row[i + 2] = 0xcc; row[i + 3] = 0xff;
+            }
+        }
+        rows.push(row);
+    }
+    const compressed = zlib.deflateSync(Buffer.concat(rows));
+
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", ihdr),
+        chunk("IDAT", compressed),
+        chunk("IEND", Buffer.alloc(0)),
+    ]);
+}
+
+function createTray() {
+    const img = nativeImage.createFromBuffer(makeTrayIconBuffer());
+    tray = new Tray(img);
+    tray.setToolTip("VSCode Switcher");
+    buildTrayMenu();
 }
 
 // ── Global Hotkeys ────────────────────────────────────────────────────────────
