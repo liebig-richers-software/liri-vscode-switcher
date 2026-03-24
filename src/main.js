@@ -5,6 +5,7 @@ const fs = require("fs");
 const koffi = require("koffi");
 
 let mainWindow;
+let configWindow = null;
 let tray;
 let config;
 let barHeight;
@@ -46,7 +47,7 @@ function findWindowByTitle(fragment) {
         const title = getWindowTitle(hwnd);
         if (title.includes(fragment)) {
             found = hwnd;
-            return false; // stop enumeration
+            return false;
         }
         return true;
     }, koffi.pointer(WNDENUMPROC));
@@ -78,9 +79,20 @@ function focusWindowByTitle(titleFragment) {
     return { success: true, title: `focused:${getWindowTitle(hwnd)}` };
 }
 
-// ── Window focused state polling ──────────────────────────────────────────────
+// ── Window state polling ───────────────────────────────────────────────────────
 
-function getOpenProjectIds() {
+function calcBarHeight(pinnedCount, unpinnedCount = 0) {
+    const hasDivider = pinnedCount > 0 && unpinnedCount > 0;
+    return (
+        12 + 36 + 8 + 9 // top chrome: padding + logo + logo-margin + divider
+        + pinnedCount * 52 + Math.max(0, pinnedCount - 1) * 6
+        + (hasDivider ? 9 : 0)
+        + unpinnedCount * 52 + Math.max(0, unpinnedCount - 1) * 6
+        + 8 + 36 + 8 // bottom chrome: settings-margin + settings + padding
+    );
+}
+
+function getWindowState() {
     const visibleTitles = [];
     const cb = koffi.register((hwnd, _lParam) => {
         if (!_IsWindowVisible(hwnd)) return true;
@@ -90,21 +102,31 @@ function getOpenProjectIds() {
     }, koffi.pointer(WNDENUMPROC));
     _EnumWindows(cb, null);
     koffi.unregister(cb);
-    return config.projects.filter((p) => visibleTitles.some((t) => t.includes(p.windowTitle))).map((p) => p.id);
+
+    const openIds = config.projects
+        .filter((p) => visibleTitles.some((t) => t.includes(p.windowTitle)))
+        .map((p) => p.id);
+
+    const configuredFragments = config.projects.map((p) => p.windowTitle);
+    const unpinnedWindows = visibleTitles
+        .filter((t) => t.includes("Visual Studio Code") && !configuredFragments.some((f) => t.includes(f)))
+        .map((t) => ({ title: t }));
+
+    return { openIds, unpinnedWindows };
 }
 
 function checkActiveWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const hwnd = _GetForegroundWindow();
     const title = hwnd ? getWindowTitle(hwnd) : "";
-    const openIds = getOpenProjectIds();
+    const { openIds, unpinnedWindows } = getWindowState();
 
     const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = mainWindow.getPosition();
     const [ww, wh] = mainWindow.getSize();
     const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
 
-    mainWindow.webContents.send("active-window", { title, openIds, cursorInWindow });
+    mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow });
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -113,7 +135,6 @@ function loadConfig() {
     const configPath = path.join(app.getPath("userData"), "config.json");
     const defaultConfigPath = path.join(__dirname, "..", "config.json");
 
-    // Copy default config to userData on first run
     if (!fs.existsSync(configPath)) {
         fs.copyFileSync(defaultConfigPath, configPath);
     }
@@ -131,16 +152,15 @@ function getConfigPath() {
     return path.join(app.getPath("userData"), "config.json");
 }
 
-// ── Create Window ─────────────────────────────────────────────────────────────
+// ── Create sidebar window ─────────────────────────────────────────────────────
 
 function createWindow() {
     const display = screen.getPrimaryDisplay();
     const { height: screenHeight } = display.workAreaSize;
 
     const barWidth = config.width || 72;
-    // Height: top padding + logo + divider + N buttons + settings + bottom padding
-    const n = config.projects.length;
-    barHeight = 12 + 36 + 8 + 9 + n * 52 + (n - 1) * 6 + 8 + 36 + 8;
+    barHeight = calcBarHeight(config.projects.length);
+
     let clampedY;
     if (config.barY != null) {
         clampedY = Math.max(0, Math.min(config.barY, screenHeight - barHeight));
@@ -160,7 +180,7 @@ function createWindow() {
         skipTaskbar: true,
         resizable: false,
         movable: false,
-        focusable: false, // Don't steal focus on click
+        focusable: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -170,26 +190,51 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, "index.html"));
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
-
-    // Start with click-through; renderer toggles this on hover
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
+}
+
+// ── Create config window ──────────────────────────────────────────────────────
+
+function createConfigWindow(prefill = null) {
+    if (configWindow && !configWindow.isDestroyed()) {
+        configWindow.focus();
+        if (prefill) configWindow.webContents.send("prefill-project", prefill);
+        return;
+    }
+
+    configWindow = new BrowserWindow({
+        width: 600,
+        height: 620,
+        title: "VSCode Switcher — Configure",
+        resizable: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, "config-preload.js"),
+        },
+    });
+
+    configWindow.loadFile(path.join(__dirname, "config.html"));
+    configWindow.on("closed", () => {
+        configWindow = null;
+    });
+
+    if (prefill) {
+        configWindow.webContents.once("did-finish-load", () => {
+            configWindow.webContents.send("prefill-project", prefill);
+        });
+    }
 }
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 
 function createTray() {
-    // Minimal tray icon (1x1 transparent fallback if no icon file)
     const img = nativeImage.createEmpty();
     tray = new Tray(img);
     tray.setToolTip("VSCode Switcher");
     tray.setContextMenu(
         Menu.buildFromTemplate([
-            {
-                label: "Open Config",
-                click: () => {
-                    exec(`explorer "${getConfigPath()}"`);
-                },
-            },
+            { label: "Configure", click: () => createConfigWindow() },
             {
                 label: "Reload Config",
                 click: () => {
@@ -234,8 +279,17 @@ ipcMain.handle("focus-project", (_, projectId) => {
     return focusWindowByTitle(project.windowTitle);
 });
 
-ipcMain.handle("open-config", () => {
-    exec(`explorer "${getConfigPath()}"`);
+ipcMain.handle("focus-window-by-title", (_, title) => focusWindowByTitle(title));
+
+ipcMain.handle("open-config-window", (_, prefill) => createConfigWindow(prefill ?? null));
+
+ipcMain.handle("save-config", (_, newConfig) => {
+    config = newConfig;
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
+    registerHotkeys();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("config-updated", config);
+    if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.send("config-updated", config);
+    return { success: true };
 });
 
 ipcMain.on("set-ignore-mouse", (_, ignore) => {
@@ -257,11 +311,23 @@ ipcMain.on("save-window-y", (_, y) => {
     fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 });
 
+ipcMain.on("resize-window", (_, height) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const barWidth = config.width || 72;
+    const [, wy] = mainWindow.getPosition();
+    const clampedY = Math.max(0, Math.min(wy, screenHeight - height));
+    barHeight = height;
+    mainWindow.setBounds({ x: 0, y: clampedY, width: barWidth, height });
+});
+
+ipcMain.on("close-config-window", () => configWindow?.close());
+
 ipcMain.handle("check-active-window", () => {
     const hwnd = _GetForegroundWindow();
     const title = hwnd ? getWindowTitle(hwnd) : "";
-    const openIds = getOpenProjectIds();
-    return { title, openIds };
+    const { openIds, unpinnedWindows } = getWindowState();
+    return { title, openIds, unpinnedWindows };
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
@@ -272,8 +338,17 @@ app.whenReady().then(() => {
     createTray();
     registerHotkeys();
 
-    // Poll active window every 500ms to highlight active project
     setInterval(checkActiveWindow, 500);
+
+    // ── Dev: hot-reload renderer on HTML/CSS/JS changes ───────────────────────
+    if (!app.isPackaged) {
+        const { watch } = require("fs");
+        watch(__dirname, (_, filename) => {
+            if (!filename || !/\.(html|css|js)$/.test(filename) || filename === "main.js") return;
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
+            if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.reload();
+        });
+    }
 });
 
 app.on("will-quit", () => {

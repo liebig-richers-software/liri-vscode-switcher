@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld("switcher", {
     setIgnoreMouse: (ignore) => ipcRenderer.send("set-ignore-mouse", ignore),
     moveWindow: (y) => ipcRenderer.send("move-window", y),
     saveWindowY: (y) => ipcRenderer.send("save-window-y", y),
+    resizeWindow: (h) => ipcRenderer.send("resize-window", h),
+    openConfigWindow: (prefill) => ipcRenderer.invoke("open-config-window", prefill),
+    focusWindowByTitle: (title) => ipcRenderer.invoke("focus-window-by-title", title),
 });

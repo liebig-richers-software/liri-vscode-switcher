@@ -43,8 +43,8 @@
                 border-right: 1px solid var(--bar-border);
                 backdrop-filter: blur(20px) saturate(1.4);
                 -webkit-backdrop-filter: blur(20px) saturate(1.4);
-                padding: 12px 0 8px;
-                gap: 4px;
+                padding: 8px 0;
+                gap: 6px;
                 font-family: var(--font);
                 -webkit-app-region: drag;
                 transform: translateX(calc(-100% + 3px));
@@ -70,7 +70,6 @@
                 align-items: center;
                 justify-content: center;
                 font-size: 16px;
-                margin-bottom: 8px;
                 flex-shrink: 0;
                 -webkit-app-region: no-drag;
                 cursor: grab;
@@ -98,9 +97,8 @@
                 flex-direction: column;
                 align-items: center;
                 gap: 6px;
-                flex: 1;
+                flex: 0 0 auto;
                 width: 100%;
-                overflow: hidden;
                 -webkit-app-region: no-drag;
             }
 
@@ -171,6 +169,43 @@
             }
             .project-btn.unavailable:active {
                 transform: none;
+            }
+
+            /* Unpinned (unknown VS Code window) */
+            .project-btn.unpinned {
+                border-style: dashed;
+                border-color: rgba(255, 255, 255, 0.18);
+                opacity: 0.55;
+            }
+            .project-btn.unpinned:hover {
+                opacity: 0.9;
+                border-color: rgba(255, 255, 255, 0.35);
+            }
+            .project-btn.unpinned:hover::before {
+                opacity: 0.08;
+            }
+            .pin-btn {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 9px;
+                color: var(--text-bright);
+                opacity: 0;
+                z-index: 3;
+                padding: 2px 3px;
+                border-radius: 3px;
+                -webkit-app-region: no-drag;
+                transition: opacity 0.15s, background 0.15s;
+            }
+            .project-btn.unpinned:hover .pin-btn {
+                opacity: 0.7;
+            }
+            .pin-btn:hover {
+                opacity: 1 !important;
+                background: rgba(255, 255, 255, 0.12);
             }
 
             /* Not-found flash */
@@ -268,7 +303,6 @@
                 transition: all 0.15s;
                 -webkit-app-region: no-drag;
                 flex-shrink: 0;
-                margin-top: 8px;
             }
             .settings-btn:hover {
                 color: var(--text-bright);
@@ -296,6 +330,7 @@
             let config = null;
             let activeWindowTitle = "";
             let openProjectIds = [];
+            let unpinnedWindows = [];
 
             function colorWithAlpha(hex, alpha) {
                 const r = parseInt(hex.slice(1, 3), 16);
@@ -319,12 +354,20 @@
 
             function updateActiveStates() {
                 const activeId = getActiveProjectId();
-                document.querySelectorAll(".project-btn").forEach((btn) => {
+                document.querySelectorAll(".project-btn:not(.unpinned)").forEach((btn) => {
                     const available = openProjectIds.includes(btn.dataset.id);
                     btn.classList.toggle("active", btn.dataset.id === activeId);
                     btn.classList.toggle("unavailable", !available);
                     btn.disabled = !available;
                 });
+            }
+
+            // Extract a short label from a VS Code window title
+            // e.g. "index.html — myproject — Visual Studio Code" → "myproject"
+            function extractVSCodeLabel(title) {
+                const stripped = title.replace(/\s[—–-]\s*Visual Studio Code\s*$/, "").trim();
+                const parts = stripped.split(/\s[—–-]\s/);
+                return parts[parts.length - 1].trim() || "VS Code";
             }
 
             async function focusProject(id) {
@@ -375,16 +418,82 @@
 
                 sidebar.appendChild(projects);
 
+                // Container for unpinned (unknown) VS Code windows
+                const unpinnedContainer = document.createElement("div");
+                unpinnedContainer.id = "unpinned-container";
+                unpinnedContainer.className = "projects";
+                sidebar.appendChild(unpinnedContainer);
+
                 // Settings button
                 const settingsBtn = document.createElement("button");
                 settingsBtn.className = "settings-btn";
                 settingsBtn.textContent = "⚙";
-                settingsBtn.title = "Open config.json";
-                settingsBtn.addEventListener("click", () => window.switcher.openConfig());
+                settingsBtn.title = "Configure projects";
+                settingsBtn.addEventListener("click", () => window.switcher.openConfigWindow());
                 sidebar.appendChild(settingsBtn);
 
                 initDrag(logo);
-                updateActiveStates();
+                renderUnpinnedButtons();
+            }
+
+            function syncWindowHeight() {
+                // Measure actual rendered height from the DOM instead of a formula.
+                // This avoids off-by-N errors from flex gaps, margins, and rounding.
+                const sidebarEl = document.getElementById("sidebar");
+                const cs = getComputedStyle(sidebarEl);
+                const gap = parseFloat(cs.gap) || 0;
+                let h = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+                const visibleChildren = [...sidebarEl.children].filter(
+                    (c) => getComputedStyle(c).display !== "none",
+                );
+                visibleChildren.forEach((child) => {
+                    const ccs = getComputedStyle(child);
+                    h += child.offsetHeight + parseFloat(ccs.marginTop) + parseFloat(ccs.marginBottom);
+                });
+                h += Math.max(0, visibleChildren.length - 1) * gap;
+                window.switcher.resizeWindow(Math.ceil(h));
+            }
+
+            function renderUnpinnedButtons() {
+                const container = document.getElementById("unpinned-container");
+                if (!container) return;
+                container.innerHTML = "";
+                container.style.display = unpinnedWindows.length > 0 ? "" : "none";
+
+                if (unpinnedWindows.length > 0 && config?.projects.length > 0) {
+                    const div = document.createElement("div");
+                    div.className = "divider";
+                    container.appendChild(div);
+                }
+
+                for (const win of unpinnedWindows) {
+                    const label = extractVSCodeLabel(win.title);
+                    const btn = document.createElement("button");
+                    btn.className = "project-btn unpinned";
+                    btn.dataset.title = win.title;
+                    btn.style.setProperty("--project-color", "#888");
+                    btn.innerHTML = `
+                        <span class="project-icon">🪟</span>
+                        <span class="project-label">${label}</span>
+                        <button class="pin-btn" title="Pin to config">📌</button>
+                        <span class="tooltip">${win.title}</span>
+                    `;
+                    btn.addEventListener("click", async (e) => {
+                        if (e.target.classList.contains("pin-btn")) return;
+                        const result = await window.switcher.focusWindowByTitle(win.title);
+                        if (!result.success) {
+                            btn.classList.add("not-found");
+                            setTimeout(() => btn.classList.remove("not-found"), 400);
+                        }
+                    });
+                    btn.querySelector(".pin-btn").addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        window.switcher.openConfigWindow({ windowTitle: label });
+                    });
+                    container.appendChild(btn);
+                }
+
+                syncWindowHeight();
             }
 
             // ── Init ──────────────────────────────────────────────────────────────────
@@ -397,15 +506,20 @@
                 const initial = await window.switcher.checkActiveWindow();
                 activeWindowTitle = initial.title;
                 openProjectIds = initial.openIds;
+                unpinnedWindows = initial.unpinnedWindows ?? [];
                 updateActiveStates();
+                renderUnpinnedButtons();
             }
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
-            window.switcher.onActiveWindow(({ title, openIds, cursorInWindow }) => {
+            window.switcher.onActiveWindow(({ title, openIds, unpinnedWindows: wins, cursorInWindow }) => {
                 activeWindowTitle = title;
                 openProjectIds = openIds;
+                const changed = JSON.stringify(wins) !== JSON.stringify(unpinnedWindows);
+                unpinnedWindows = wins ?? [];
                 updateActiveStates();
+                if (changed) renderUnpinnedButtons();
                 if (sidebarVisible && !cursorInWindow) scheduleHide();
             });
 
