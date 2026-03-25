@@ -14,7 +14,7 @@
     "window-manager",
     "developer-tools"
   ],
-  "author": "Liebig Richers Software",
+  "author": "Liebig Richers Software GmbH",
   "license": "MIT",
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -27,7 +27,7 @@
     "electron-builder": "^24.0.0"
   },
   "build": {
-    "appId": "de.liebig-richers.vscode-switcher",
+    "appId": "de.lirisoft.vscode-switcher",
     "productName": "VSCode Switcher",
     "win": {
       "target": "nsis",
