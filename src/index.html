@@ -6,6 +6,23 @@
         <title>VSCode Switcher</title>
         <style>
             @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
+            @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0");
+
+            .material-symbols-outlined {
+                font-family: 'Material Symbols Outlined';
+                font-weight: normal;
+                font-style: normal;
+                font-size: 20px;
+                line-height: 1;
+                letter-spacing: normal;
+                text-transform: none;
+                white-space: nowrap;
+                display: inline-block;
+                direction: ltr;
+                -webkit-font-smoothing: antialiased;
+                font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+                user-select: none;
+            }
 
             *,
             *::before,
@@ -230,6 +247,7 @@
                 line-height: 1;
                 position: relative;
                 z-index: 1;
+                color: var(--project-color);
             }
 
             .project-label {
@@ -332,6 +350,17 @@
             let openProjectIds = [];
             let unpinnedWindows = [];
 
+            function isSymbolName(icon) {
+                return typeof icon === "string" && /^[a-z][a-z0-9_]*$/.test(icon);
+            }
+
+            function iconHTML(icon, cls = "") {
+                if (isSymbolName(icon)) {
+                    return `<span class="project-icon material-symbols-outlined${cls ? " " + cls : ""}">${icon}</span>`;
+                }
+                return `<span class="project-icon${cls ? " " + cls : ""}">${icon || "📁"}</span>`;
+            }
+
             function colorWithAlpha(hex, alpha) {
                 const r = parseInt(hex.slice(1, 3), 16);
                 const g = parseInt(hex.slice(3, 5), 16);
@@ -406,7 +435,7 @@
                     btn.style.setProperty("--project-color", project.color || "#666");
 
                     btn.innerHTML = `
-          <span class="project-icon">${project.icon || "📁"}</span>
+          ${iconHTML(project.icon || "folder")}
           <span class="project-label">${project.label}</span>
           ${project.hotkey ? `<span class="hotkey-badge">${getHotkeyShort(project.hotkey)}</span>` : ""}
           <span class="tooltip">${project.label}${project.hotkey ? ` · ${project.hotkey}` : ""}</span>
@@ -473,7 +502,7 @@
                     btn.dataset.title = win.title;
                     btn.style.setProperty("--project-color", "#888");
                     btn.innerHTML = `
-                        <span class="project-icon">🪟</span>
+                        ${iconHTML("window")}
                         <span class="project-label">${label}</span>
                         <button class="pin-btn" title="Pin to config">📌</button>
                         <span class="tooltip">${win.title}</span>

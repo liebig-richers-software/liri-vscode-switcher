@@ -4,6 +4,24 @@
         <meta charset="UTF-8" />
         <title>VSCode Switcher — Configure</title>
         <style>
+            @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0");
+
+            .material-symbols-outlined {
+                font-family: 'Material Symbols Outlined';
+                font-weight: normal;
+                font-style: normal;
+                font-size: 20px;
+                line-height: 1;
+                letter-spacing: normal;
+                text-transform: none;
+                white-space: nowrap;
+                display: inline-block;
+                direction: ltr;
+                -webkit-font-smoothing: antialiased;
+                font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+                user-select: none;
+            }
+
             *,
             *::before,
             *::after {
@@ -205,6 +223,7 @@
                 height: 28px;
                 background: rgba(255, 255, 255, 0.05);
                 border: 1px solid var(--border);
+                color: var(--text);
                 border-radius: 4px;
                 cursor: pointer;
                 font-size: 17px;
@@ -259,21 +278,25 @@
                 padding: 12px 0;
             }
             .icon-picker button {
-                width: 28px;
-                height: 28px;
+                width: 34px;
+                height: 34px;
                 background: none;
                 border: 1px solid transparent;
                 border-radius: 4px;
                 cursor: pointer;
-                font-size: 15px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 transition: all 0.1s;
+                color: rgba(255,255,255,0.7);
             }
             .icon-picker button:hover {
                 background: rgba(255,255,255,0.1);
                 border-color: rgba(255,255,255,0.2);
+                color: #fff;
+            }
+            .icon-grid {
+                grid-template-columns: repeat(8, 34px) !important;
             }
 
             /* ── Delete button ── */
@@ -344,66 +367,254 @@
         <script>
             let config = null;
 
-            const ICONS = [
-                // Files & data
-                "📁","📂","🗂️","📦","📄","📃","📋","📊","📈","📉",
-                "🗃️","💾","📑","📒","📓","📔","📕","📗","📘","📙",
-                // Dev & hardware
-                "💻","🖥️","⌨️","🖱️","🖨️","📱","📲","🔌","🔋","💡",
-                // Tools
-                "🔧","🔨","🛠️","⚙️","🧰","🪛","🪚","🔗","📎","🧲",
-                // Web & network
-                "🌐","☁️","🌍","🌎","🌏","📡","🔭","🛰️","📶","🔒",
-                // Code & tech
-                "🤖","🦾","🧩","🎮","🕹️","⚡","🔥","🚀","🎯","🏗️",
-                // Actions & status
-                "🔄","♻️","✅","❌","⚠️","🚦","🚧","🔴","🟢","🟡",
-                // Science & art
-                "🧪","🧬","🔬","🎨","🖌️","✏️","📝","🖊️","📐","📏",
-                // Security & comms
-                "🔑","🗝️","🛡️","🔐","💬","📬","📨","🔔","📢","📣",
-                // Misc & symbols
-                "⭐","🌟","💫","✨","🏆","🥇","🎁","🏠","🏢","🏭",
-                // Business & Finance (BC, Rechnungen, ERP)
-                "💼","🏦","💳","💰","💹","🧾","🏛️","🤝","🧮","💵",
-                // Platform & Modules (Power Platform, React, Module, System)
-                "⚛️","🗄️","🎛️","🔁","🗓️","📅","📜","🧱","🔷","🔶",
-                // People & Org
-                "👤","👥","👨‍💼","👩‍💼","🏪","🏬","🏨","🏫","🏣","🏤",
-            ];
+            // true if icon is a Material Symbol name (e.g. "folder", "receipt_long")
+            function isSymbolName(icon) {
+                return typeof icon === "string" && /^[a-z][a-z0-9_]*$/.test(icon);
+            }
 
-            const ICON_KEYWORDS = {
-                "📁":"folder ordner","📂":"folder open ordner","🗂️":"archive archiv","📦":"package paket bundle",
-                "📄":"file dokument datei","📃":"file dokument","📋":"clipboard liste checklist","📊":"chart diagramm statistik business central bc",
-                "📈":"chart up wachstum","📉":"chart down verlust","🗃️":"filing archive kartei","💾":"save disk speichern",
-                "📑":"document tabs","📒":"notebook","📓":"notebook","📔":"notebook","📕":"book","📗":"book","📘":"book","📙":"book",
-                "💻":"laptop computer","🖥️":"desktop monitor bildschirm system","⌨️":"keyboard tastatur","🖱️":"mouse maus",
-                "🖨️":"printer drucker","📱":"phone mobile handy app","📲":"phone mobile app","🔌":"plug power platform strom",
-                "🔋":"battery akku","💡":"idea lampe lamp",
-                "🔧":"wrench tool werkzeug","🔨":"hammer tool","🛠️":"tools werkzeug","⚙️":"gear settings config einstellungen",
-                "🧰":"toolbox werkzeugkasten","🪛":"screwdriver schraubenzieher","🪚":"saw säge","🔗":"link url kette","📎":"paperclip attachment","🧲":"magnet",
-                "🌐":"web internet netzwerk global","☁️":"cloud azure aws","🌍":"world global","🌎":"world global","🌏":"world global",
-                "📡":"signal antenne","🔭":"telescope","🛰️":"satellite","📶":"wifi signal network","🔒":"lock security sicherheit",
-                "🤖":"robot ai bot automatisierung power platform automate","🦾":"arm robot ai","🧩":"puzzle modul module component plugin",
-                "🎮":"game controller","🕹️":"joystick","⚡":"lightning schnell fast energie","🔥":"fire hot","🚀":"rocket deploy launch",
-                "🎯":"target ziel","🏗️":"build bauen construction",
-                "🔄":"refresh sync synchronisieren","♻️":"recycle","✅":"check ok done fertig","❌":"error fehler","⚠️":"warning warnung",
-                "🚦":"status ampel","🚧":"construction under","🔴":"red rot","🟢":"green grün","🟡":"yellow gelb",
-                "🧪":"test experiment","🧬":"dna biology","🔬":"microscope labor","🎨":"art design farbe","🖌️":"paint design",
-                "✏️":"pencil stift","📝":"memo notiz note","🖊️":"pen stift","📐":"lineal ruler","📏":"lineal messen ruler",
-                "🔑":"key schlüssel login auth","🗝️":"key schlüssel","🛡️":"shield security sicherheit schutz","🔐":"locked sicher",
-                "💬":"chat message nachricht","📬":"mail email post","📨":"mail email eingang","🔔":"notification benachrichtigung","📢":"megaphone","📣":"megaphone",
-                "⭐":"star favorit","🌟":"star favorit","💫":"star","✨":"sparkles neu new","🏆":"trophy gewinner","🥇":"gold first",
-                "🎁":"gift geschenk","🏠":"home haus","🏢":"office building büro gebäude","🏭":"factory fabrik produktion",
-                "💼":"briefcase business aktentasche beruf","🏦":"bank finanzen finance","💳":"kreditkarte zahlung payment card",
-                "💰":"money geld finanzen finance","💹":"finance aktie trading chart","🧾":"rechnung invoice receipt quittung bill",
-                "🏛️":"institution building","🤝":"handshake partner deal","🧮":"calculator rechner berechnung","💵":"money dollar geld",
-                "⚛️":"react atom component frontend javascript","🗄️":"database datenbank server system","🎛️":"controls steuerung dashboard power platform",
-                "🔁":"loop repeat workflow automate prozess","🗓️":"calendar kalender","📅":"calendar date datum","📜":"dokument document scroll",
-                "🧱":"brick block modul module","🔷":"diamond blue blau","🔶":"diamond orange",
-                "👤":"person user nutzer","👥":"people users gruppe team","👨‍💼":"business manager","👩‍💼":"business manager",
-                "🏪":"shop laden store","🏬":"kaufhaus store","🏨":"hotel","🏫":"school schule","🏣":"post","🏤":"post",
-            };
+            function setIconBtnContent(btn, icon) {
+                if (isSymbolName(icon)) {
+                    btn.innerHTML = `<span class="material-symbols-outlined">${icon}</span>`;
+                } else {
+                    btn.textContent = icon || "📁";
+                }
+                btn.dataset.value = icon || "folder";
+            }
+
+            // [symbol_name, search_keywords]
+            const ICONS = [
+                // Files & Documents
+                ["folder",               "ordner datei file"],
+                ["folder_open",          "ordner offen file"],
+                ["description",          "dokument file text"],
+                ["article",              "artikel text bericht"],
+                ["note",                 "notiz memo"],
+                ["draft",                "entwurf draft"],
+                ["archive",              "archiv zip bundle paket"],
+                ["inventory_2",          "lager box bundle inventar"],
+                ["attach_file",          "anhang attachment datei"],
+                ["folder_zip",           "archiv komprimiert zip"],
+                // Code & Dev
+                ["code",                 "code programmierung dev software"],
+                ["terminal",             "terminal console shell cmd"],
+                ["data_object",          "json objekt daten data"],
+                ["bug_report",           "bug fehler error"],
+                ["developer_mode",       "entwickler dev mode"],
+                ["deployed_code",        "deploy release build"],
+                ["api",                  "api rest interface schnittstelle"],
+                ["webhook",              "webhook integration"],
+                ["commit",               "commit git versionierung"],
+                ["integration_instructions", "integration anleitung"],
+                // Cloud & Network
+                ["cloud",                "cloud azure aws wolke"],
+                ["cloud_sync",           "cloud sync synchronisieren"],
+                ["language",             "web internet global netzwerk"],
+                ["public",               "global öffentlich web"],
+                ["wifi",                 "wifi wlan netzwerk"],
+                ["hub",                  "hub netzwerk zentrum"],
+                ["router",               "router netzwerk gateway"],
+                ["share",                "teilen share netzwerk"],
+                ["link",                 "link url verknüpfung"],
+                ["cell_tower",           "signal antenne netzwerk"],
+                // Database & System
+                ["database",             "datenbank db system sql"],
+                ["storage",              "speicher festplatte storage"],
+                ["memory",               "arbeitsspeicher ram memory"],
+                ["backup",               "backup sicherung"],
+                ["restore",              "wiederherstellen restore"],
+                ["computer",             "computer pc system"],
+                ["laptop",               "laptop notebook"],
+                ["monitor",              "bildschirm monitor display"],
+                ["smartphone",           "smartphone handy mobile app"],
+                ["dns",                  "dns server netzwerk system"],
+                // Tools & Settings
+                ["settings",             "einstellungen config konfiguration"],
+                ["tune",                 "feinabstimmung config einstellungen"],
+                ["build",                "build tool kompilieren"],
+                ["construction",         "bauen konstruktion build"],
+                ["handyman",             "werkzeug tool reparatur"],
+                ["extension",            "plugin erweiterung addon modul module"],
+                ["widgets",              "widget komponente component ui"],
+                ["dashboard",            "dashboard übersicht cockpit"],
+                ["view_module",          "modul grid ansicht module"],
+                ["auto_fix_high",        "automatisch optimieren magie"],
+                // Business Central & ERP
+                ["bar_chart",            "diagramm chart statistik business central bc erp analytics"],
+                ["pie_chart",            "kreisdiagramm chart statistik"],
+                ["analytics",            "analytics statistik auswertung bc business central"],
+                ["trending_up",          "wachstum trend aufwärts"],
+                ["account_tree",         "prozess baum hierarchie erp struktur"],
+                ["corporate_fare",       "unternehmen corporate firma gebäude"],
+                ["business_center",      "business aktentasche beruf"],
+                ["work",                 "arbeit büro job"],
+                ["factory",              "fabrik produktion werk"],
+                ["apartment",            "gebäude büro firma"],
+                // Finance & Invoices
+                ["receipt_long",         "rechnung invoice receipt quittung bill beleg"],
+                ["payments",             "zahlung payment transaktion"],
+                ["credit_card",          "kreditkarte card zahlung bezahlen"],
+                ["account_balance",      "bank konto finanzen finance"],
+                ["currency_exchange",    "währung wechselkurs exchange finanzen"],
+                ["price_check",          "preis check angebot kosten"],
+                ["shopping_cart",        "warenkorb einkauf shop bestellung"],
+                ["store",                "shop laden store"],
+                ["inventory",            "inventar bestand lager"],
+                ["local_shipping",       "versand lieferung logistik"],
+                // Power Platform & Automation
+                ["bolt",                 "blitz power schnell automate energie"],
+                ["electric_bolt",        "strom power automate energie"],
+                ["auto_awesome",         "magic automatisch power platform ki"],
+                ["smart_toy",            "roboter ai ki bot automate"],
+                ["psychology",           "ai künstliche intelligenz ki"],
+                ["model_training",       "training modell ai ml"],
+                ["schema",               "schema diagramm workflow flow"],
+                ["account_tree",         "flow prozess hierarchie"],
+                ["sync_alt",             "sync automate workflow prozess"],
+                ["play_circle",          "starten ausführen run flow"],
+                // React & Frontend
+                ["web",                  "web frontend browser react"],
+                ["web_asset",            "web app frontend resource"],
+                ["layers",               "ebenen layers frontend react component"],
+                ["brush",                "design styling frontend farbe"],
+                ["palette",              "farben design theme"],
+                ["css",                  "css styling frontend"],
+                ["html",                 "html markup frontend"],
+                ["view_in_ar",           "3d component react render"],
+                ["style",                "style css design theme"],
+                ["draw",                 "zeichnen design frontend"],
+                // People & Org
+                ["person",               "person nutzer user einzeln"],
+                ["group",                "gruppe team people users nutzer"],
+                ["groups",               "mehrere teams gruppe"],
+                ["manage_accounts",      "nutzer verwaltung admin account"],
+                ["badge",                "ausweis mitarbeiter id"],
+                ["engineering",          "ingenieur entwickler technical"],
+                ["support_agent",        "support hilfe kundenservice"],
+                ["supervisor_account",   "supervisor admin leitung"],
+                ["contact_page",         "kontakt person profil"],
+                ["how_to_reg",           "registrierung zugang onboarding"],
+                // Security & Auth
+                ["lock",                 "gesperrt sicherheit security"],
+                ["key",                  "schlüssel key auth login passwort"],
+                ["shield",               "schild schutz security firewall"],
+                ["verified_user",        "verifiziert geprüft sicher"],
+                ["encrypted",            "verschlüsselt encryption sicher"],
+                ["admin_panel_settings", "admin einstellungen panel"],
+                ["vpn_key",              "vpn key tunnel sicher"],
+                ["https",                "https ssl sicherheit zertifikat"],
+                // Status & Actions
+                ["check_circle",         "ok fertig done erledigt"],
+                ["cancel",               "abbruch cancel fehler"],
+                ["warning",              "warnung alert achtung"],
+                ["info",                 "info hinweis information"],
+                ["refresh",              "aktualisieren reload sync"],
+                ["rocket_launch",        "launch deploy release starten"],
+                ["flag",                 "flagge meilenstein milestone"],
+                ["bookmark",             "lesezeichen favorit gespeichert"],
+                ["star",                 "stern favorit highlight wichtig"],
+                ["notifications",        "benachrichtigung notification alert"],
+                // Comms
+                ["email",                "email mail nachricht"],
+                ["chat",                 "chat nachricht konversation"],
+                ["forum",                "forum diskussion threads"],
+                ["announcement",         "ankündigung news meldung"],
+                ["send",                 "senden abschicken"],
+                ["campaign",             "kampagne marketing"],
+                // Schedule & Time
+                ["schedule",             "schedule zeit uhr kalender termin"],
+                ["event",                "termin kalender event appointment"],
+                ["calendar_today",       "heute kalender datum today"],
+                ["alarm",                "alarm erinnerung wecker"],
+                ["timer",                "timer countdown zeit"],
+                ["hourglass_empty",      "warten loading hourglass zeit"],
+                ["pending_actions",      "ausstehend pending aufgaben"],
+                ["task",                 "aufgabe task todo erledigen"],
+                ["more_time",            "mehr zeit termin verlängern"],
+                ["event_repeat",         "wiederkehrend termin serie"],
+                // Run & Execute
+                ["play_arrow",           "abspielen starten run ausführen play"],
+                ["run_circle",           "ausführen run starten execute"],
+                ["directions_run",       "laufen rennen run sprint"],
+                ["fast_forward",         "schnell vorspulen fast"],
+                ["skip_next",            "weiter nächste step"],
+                ["replay",               "wiederholen replay neu starten"],
+                ["play_circle",          "abspielen starten run play"],
+                // Architecture & Design
+                ["architecture",         "architektur design entwurf blueprint"],
+                ["design_services",      "design dienste gestaltung"],
+                ["foundation",           "grundlage basis fundament"],
+                ["workspaces",           "arbeitsbereiche workspace"],
+                ["space_dashboard",      "übersicht dashboard space"],
+                ["grid_view",            "grid raster ansicht layout"],
+                ["view_quilt",           "layout kacheln ansicht"],
+                ["account_tree",         "struktur hierarchie baum architektur"],
+                ["category",             "kategorie gruppe sortierung"],
+                ["package_2",            "paket modul bundle"],
+                // Accounting & Finance
+                ["calculate",            "berechnen rechner accounting buchhaltung"],
+                ["balance",              "bilanz gleichgewicht waage buchhaltung"],
+                ["summarize",            "zusammenfassung bericht report abschluss"],
+                ["request_quote",        "angebot anfrage quote kostenvoranschlag"],
+                ["attach_money",         "geld betrag dollar finanzen accounting"],
+                ["paid",                 "bezahlt paid abgerechnet"],
+                ["percent",              "prozent steuer rabatt"],
+                ["price_change",         "preisänderung kurs finanzen"],
+                ["trending_down",        "verlust rückgang abwärts"],
+                ["leaderboard",          "rangliste performance übersicht"],
+                // Cash & Wallet
+                ["money",                "geld scheine cash bargeld"],
+                ["savings",              "sparen sparkasse piggybank rücklage"],
+                ["euro",                 "euro währung"],
+                ["wallet",               "geldbörse wallet portemonnaie"],
+                ["local_atm",            "atm geldautomat bargeld"],
+                ["currency_bitcoin",     "bitcoin krypto crypto"],
+                ["currency_pound",       "pfund gbp währung"],
+                ["monetization_on",      "monetarisierung geld verdienen"],
+                // Payment & POS
+                ["payment",              "zahlung karte bezahlen payment"],
+                ["point_of_sale",        "kasse pos verkauf checkout"],
+                ["contactless",          "kontaktlos nfc bezahlen tap"],
+                ["qr_code_2",            "qr code scan bezahlen"],
+                ["receipt",              "beleg quittung kassenbon"],
+                ["invoice",              "rechnung invoice faktura"],
+                ["price_check",          "preis check preisvergleich"],
+                // Rocket & Deploy
+                ["rocket",               "rakete rocket start"],
+                ["deployed_code_update", "update deploy aktualisieren"],
+                ["cloud_done",           "cloud fertig deployed"],
+                ["publish",              "veröffentlichen publish release"],
+                ["upload",               "hochladen upload"],
+                ["sync",                 "sync synchronisieren abgleich"],
+                // Network
+                ["lan",                  "lan netzwerk lokal network"],
+                ["network_node",         "netzwerk knoten node network"],
+                ["network_check",        "netzwerk check ping status"],
+                ["cable",                "kabel ethernet verbindung"],
+                ["mediation",            "routing vermittlung netzwerk"],
+                ["topology_star",        "stern topologie netzwerk"],
+                ["topology_ring",        "ring topologie netzwerk"],
+                ["device_hub",           "hub gerät netzwerk"],
+                ["vpn_lock",             "vpn sicher tunnel netzwerk"],
+                ["signal_cellular_alt",  "signal mobilfunk netzwerk"],
+                ["broadcast_on_personal","broadcast senden netzwerk"],
+                ["cloud_queue",          "cloud warteschlange netzwerk"],
+                // Timetable & Plan
+                ["view_timeline",        "zeitplan timeline plan übersicht"],
+                ["timeline",             "zeitlinie verlauf timeline"],
+                ["calendar_view_week",   "wochenansicht kalender zeitplan"],
+                ["calendar_view_month",  "monatsansicht kalender plan"],
+                ["date_range",           "zeitraum datumsbereich plan"],
+                ["table_chart",          "tabelle diagramm zeitplan timetable"],
+                ["table_view",           "tabellenansicht übersicht plan"],
+                ["checklist",            "checkliste aufgaben plan todo"],
+                ["assignment",           "aufgabe zuweisung plan projekt"],
+                ["assignment_turned_in", "erledigt abgeschlossen done plan"],
+                ["event_note",           "termin notiz plan ereignis"],
+                ["splitscreen",          "split ansicht layout plan"],
+                ["list_alt",             "liste alternativ plan übersicht"],
+                ["format_list_numbered", "nummerierte liste reihenfolge plan"],
+                ["sticky_note_2",        "notizzettel memo plan"],
+            ];
 
             let activePicker = null;
 
@@ -427,7 +638,7 @@
                     grid.innerHTML = "";
                     const q = query.trim().toLowerCase();
                     const filtered = q
-                        ? ICONS.filter(icon => icon === q || (ICON_KEYWORDS[icon] || "").includes(q))
+                        ? ICONS.filter(([name, kw]) => name.includes(q) || kw.includes(q))
                         : ICONS;
                     if (filtered.length === 0) {
                         const empty = document.createElement("div");
@@ -436,13 +647,13 @@
                         grid.appendChild(empty);
                         return;
                     }
-                    for (const icon of filtered) {
+                    for (const [name] of filtered) {
                         const b = document.createElement("button");
                         b.type = "button";
-                        b.textContent = icon;
+                        b.title = name.replace(/_/g, " ");
+                        b.innerHTML = `<span class="material-symbols-outlined">${name}</span>`;
                         b.addEventListener("click", () => {
-                            btn.textContent = icon;
-                            btn.dataset.value = icon;
+                            setIconBtnContent(btn, name);
                             picker.remove();
                             activePicker = null;
                         });
@@ -456,7 +667,7 @@
                 document.body.appendChild(picker);
                 activePicker = picker;
 
-                // Position below button, clamp to viewport
+                // Position below button, clamped to viewport
                 const rect = btn.getBoundingClientRect();
                 const pw = picker.offsetWidth;
                 const ph = picker.offsetHeight;
@@ -494,13 +705,12 @@
                 row.className = "project-row" + (isNew ? " new-row" : "");
                 row.dataset.id = project.id || "";
 
-                const icon = project.icon ?? "📁";
+                const icon = project.icon ?? "folder";
                 const iconBtn = document.createElement("button");
                 iconBtn.type = "button";
                 iconBtn.className = "icon-btn";
                 iconBtn.title = "Choose icon";
-                iconBtn.textContent = icon;
-                iconBtn.dataset.value = icon;
+                setIconBtnContent(iconBtn, icon);
                 iconBtn.addEventListener("click", () => openIconPicker(iconBtn));
 
                 row.innerHTML = `
@@ -533,7 +743,7 @@
                         if (!label || !windowTitle) return null;
                         return {
                             id: row.dataset.id || label.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now().toString(36),
-                            icon: iconBtn?.dataset.value || iconBtn?.textContent || "📁",
+                            icon: iconBtn?.dataset.value || "folder",
                             label,
                             windowTitle,
                             color: inputs[2].value,
