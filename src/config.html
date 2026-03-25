@@ -222,11 +222,41 @@
                 border: 1px solid var(--border-focus);
                 border-radius: 8px;
                 padding: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                z-index: 1000;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+                width: 316px;
+            }
+            .icon-search {
+                width: 100%;
+                background: rgba(255,255,255,0.06);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 5px 8px;
+                outline: none;
+                flex-shrink: 0;
+            }
+            .icon-search:focus { border-color: var(--border-focus); }
+            .icon-search::placeholder { color: var(--text-dim); }
+            .icon-grid {
                 display: grid;
                 grid-template-columns: repeat(10, 28px);
                 gap: 4px;
-                z-index: 1000;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+                max-height: 200px;
+                overflow-y: auto;
+            }
+            .icon-grid::-webkit-scrollbar { width: 4px; }
+            .icon-grid::-webkit-scrollbar-track { background: transparent; }
+            .icon-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+            .icon-grid-empty {
+                font-size: 11px;
+                color: var(--text-dim);
+                text-align: center;
+                padding: 12px 0;
             }
             .icon-picker button {
                 width: 28px;
@@ -334,7 +364,46 @@
                 "🔑","🗝️","🛡️","🔐","💬","📬","📨","🔔","📢","📣",
                 // Misc & symbols
                 "⭐","🌟","💫","✨","🏆","🥇","🎁","🏠","🏢","🏭",
+                // Business & Finance (BC, Rechnungen, ERP)
+                "💼","🏦","💳","💰","💹","🧾","🏛️","🤝","🧮","💵",
+                // Platform & Modules (Power Platform, React, Module, System)
+                "⚛️","🗄️","🎛️","🔁","🗓️","📅","📜","🧱","🔷","🔶",
+                // People & Org
+                "👤","👥","👨‍💼","👩‍💼","🏪","🏬","🏨","🏫","🏣","🏤",
             ];
+
+            const ICON_KEYWORDS = {
+                "📁":"folder ordner","📂":"folder open ordner","🗂️":"archive archiv","📦":"package paket bundle",
+                "📄":"file dokument datei","📃":"file dokument","📋":"clipboard liste checklist","📊":"chart diagramm statistik business central bc",
+                "📈":"chart up wachstum","📉":"chart down verlust","🗃️":"filing archive kartei","💾":"save disk speichern",
+                "📑":"document tabs","📒":"notebook","📓":"notebook","📔":"notebook","📕":"book","📗":"book","📘":"book","📙":"book",
+                "💻":"laptop computer","🖥️":"desktop monitor bildschirm system","⌨️":"keyboard tastatur","🖱️":"mouse maus",
+                "🖨️":"printer drucker","📱":"phone mobile handy app","📲":"phone mobile app","🔌":"plug power platform strom",
+                "🔋":"battery akku","💡":"idea lampe lamp",
+                "🔧":"wrench tool werkzeug","🔨":"hammer tool","🛠️":"tools werkzeug","⚙️":"gear settings config einstellungen",
+                "🧰":"toolbox werkzeugkasten","🪛":"screwdriver schraubenzieher","🪚":"saw säge","🔗":"link url kette","📎":"paperclip attachment","🧲":"magnet",
+                "🌐":"web internet netzwerk global","☁️":"cloud azure aws","🌍":"world global","🌎":"world global","🌏":"world global",
+                "📡":"signal antenne","🔭":"telescope","🛰️":"satellite","📶":"wifi signal network","🔒":"lock security sicherheit",
+                "🤖":"robot ai bot automatisierung power platform automate","🦾":"arm robot ai","🧩":"puzzle modul module component plugin",
+                "🎮":"game controller","🕹️":"joystick","⚡":"lightning schnell fast energie","🔥":"fire hot","🚀":"rocket deploy launch",
+                "🎯":"target ziel","🏗️":"build bauen construction",
+                "🔄":"refresh sync synchronisieren","♻️":"recycle","✅":"check ok done fertig","❌":"error fehler","⚠️":"warning warnung",
+                "🚦":"status ampel","🚧":"construction under","🔴":"red rot","🟢":"green grün","🟡":"yellow gelb",
+                "🧪":"test experiment","🧬":"dna biology","🔬":"microscope labor","🎨":"art design farbe","🖌️":"paint design",
+                "✏️":"pencil stift","📝":"memo notiz note","🖊️":"pen stift","📐":"lineal ruler","📏":"lineal messen ruler",
+                "🔑":"key schlüssel login auth","🗝️":"key schlüssel","🛡️":"shield security sicherheit schutz","🔐":"locked sicher",
+                "💬":"chat message nachricht","📬":"mail email post","📨":"mail email eingang","🔔":"notification benachrichtigung","📢":"megaphone","📣":"megaphone",
+                "⭐":"star favorit","🌟":"star favorit","💫":"star","✨":"sparkles neu new","🏆":"trophy gewinner","🥇":"gold first",
+                "🎁":"gift geschenk","🏠":"home haus","🏢":"office building büro gebäude","🏭":"factory fabrik produktion",
+                "💼":"briefcase business aktentasche beruf","🏦":"bank finanzen finance","💳":"kreditkarte zahlung payment card",
+                "💰":"money geld finanzen finance","💹":"finance aktie trading chart","🧾":"rechnung invoice receipt quittung bill",
+                "🏛️":"institution building","🤝":"handshake partner deal","🧮":"calculator rechner berechnung","💵":"money dollar geld",
+                "⚛️":"react atom component frontend javascript","🗄️":"database datenbank server system","🎛️":"controls steuerung dashboard power platform",
+                "🔁":"loop repeat workflow automate prozess","🗓️":"calendar kalender","📅":"calendar date datum","📜":"dokument document scroll",
+                "🧱":"brick block modul module","🔷":"diamond blue blau","🔶":"diamond orange",
+                "👤":"person user nutzer","👥":"people users gruppe team","👨‍💼":"business manager","👩‍💼":"business manager",
+                "🏪":"shop laden store","🏬":"kaufhaus store","🏨":"hotel","🏫":"school schule","🏣":"post","🏤":"post",
+            };
 
             let activePicker = null;
 
@@ -344,28 +413,64 @@
                 const picker = document.createElement("div");
                 picker.className = "icon-picker";
 
-                ICONS.forEach(icon => {
-                    const b = document.createElement("button");
-                    b.type = "button";
-                    b.textContent = icon;
-                    b.addEventListener("click", () => {
-                        btn.textContent = icon;
-                        btn.dataset.value = icon;
-                        picker.remove();
-                        activePicker = null;
-                    });
-                    picker.appendChild(b);
-                });
+                const searchInput = document.createElement("input");
+                searchInput.type = "text";
+                searchInput.className = "icon-search";
+                searchInput.placeholder = "Suchen… (react, rechnung, module…)";
+                picker.appendChild(searchInput);
+
+                const grid = document.createElement("div");
+                grid.className = "icon-grid";
+                picker.appendChild(grid);
+
+                function renderGrid(query) {
+                    grid.innerHTML = "";
+                    const q = query.trim().toLowerCase();
+                    const filtered = q
+                        ? ICONS.filter(icon => icon === q || (ICON_KEYWORDS[icon] || "").includes(q))
+                        : ICONS;
+                    if (filtered.length === 0) {
+                        const empty = document.createElement("div");
+                        empty.className = "icon-grid-empty";
+                        empty.textContent = "Keine Treffer";
+                        grid.appendChild(empty);
+                        return;
+                    }
+                    for (const icon of filtered) {
+                        const b = document.createElement("button");
+                        b.type = "button";
+                        b.textContent = icon;
+                        b.addEventListener("click", () => {
+                            btn.textContent = icon;
+                            btn.dataset.value = icon;
+                            picker.remove();
+                            activePicker = null;
+                        });
+                        grid.appendChild(b);
+                    }
+                }
+
+                renderGrid("");
+                searchInput.addEventListener("input", () => renderGrid(searchInput.value));
 
                 document.body.appendChild(picker);
                 activePicker = picker;
 
-                // Position below the button
+                // Position below button, clamp to viewport
                 const rect = btn.getBoundingClientRect();
-                picker.style.top = (rect.bottom + 4) + "px";
-                picker.style.left = rect.left + "px";
+                const pw = picker.offsetWidth;
+                const ph = picker.offsetHeight;
+                let top = rect.bottom + 4;
+                let left = rect.left;
+                if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
+                if (left < 4) left = 4;
+                if (top + ph > window.innerHeight - 4) top = rect.top - ph - 4;
+                if (top < 4) top = 4;
+                picker.style.top = top + "px";
+                picker.style.left = left + "px";
 
-                // Close on outside click
+                searchInput.focus();
+
                 setTimeout(() => {
                     document.addEventListener("click", function close(e) {
                         if (!picker.contains(e.target) && e.target !== btn) {
