@@ -119,7 +119,7 @@
             /* ── Column headers ── */
             .col-headers {
                 display: grid;
-                grid-template-columns: 52px 1fr 1.4fr 38px 100px 28px;
+                grid-template-columns: 18px 52px 1fr 1.4fr 38px 100px 28px;
                 gap: 8px;
                 padding: 10px 20px 6px;
                 flex-shrink: 0;
@@ -160,14 +160,14 @@
 
             .project-row {
                 display: grid;
-                grid-template-columns: 52px 1fr 1.4fr 38px 100px 28px;
+                grid-template-columns: 18px 52px 1fr 1.4fr 38px 100px 28px;
                 gap: 8px;
                 align-items: center;
                 background: var(--surface);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
                 padding: 8px 12px;
-                transition: border-color 0.15s;
+                transition: border-color 0.15s, opacity 0.15s, background 0.15s;
             }
 
             .project-row:focus-within {
@@ -177,6 +177,37 @@
             .project-row.new-row {
                 border-color: var(--accent);
                 animation: flash 0.6s ease;
+            }
+
+            .project-row.dragging {
+                opacity: 0.35;
+            }
+
+            .project-row.drop-above {
+                box-shadow: 0 -2px 0 0 var(--accent);
+            }
+
+            .project-row.drop-below {
+                box-shadow: 0 2px 0 0 var(--accent);
+            }
+
+            .drag-handle {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-dim);
+                cursor: grab;
+                opacity: 0;
+                transition: opacity 0.15s;
+                font-size: 18px;
+            }
+
+            .project-row:hover .drag-handle {
+                opacity: 1;
+            }
+
+            .drag-handle:active {
+                cursor: grabbing;
             }
 
             @keyframes flash {
@@ -351,6 +382,7 @@
         </header>
 
         <div class="col-headers">
+            <div></div>
             <div class="col-label">Icon</div>
             <div class="col-label">Label</div>
             <div class="col-label">Window Title</div>
@@ -617,6 +649,62 @@
             ];
 
             let activePicker = null;
+            let dragSrc = null;
+
+            function clearDropIndicators() {
+                document.querySelectorAll('.project-row.drop-above, .project-row.drop-below')
+                    .forEach(r => r.classList.remove('drop-above', 'drop-below'));
+            }
+
+            function getDropPosition(row, clientY) {
+                const rect = row.getBoundingClientRect();
+                return clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+            }
+
+            function addDragHandlers(row) {
+                const handle = row.querySelector('.drag-handle');
+
+                handle.addEventListener('mousedown', () => {
+                    row.setAttribute('draggable', 'true');
+                });
+
+                row.addEventListener('dragstart', (e) => {
+                    dragSrc = row;
+                    e.dataTransfer.effectAllowed = 'move';
+                    requestAnimationFrame(() => row.classList.add('dragging'));
+                });
+
+                row.addEventListener('dragend', () => {
+                    row.removeAttribute('draggable');
+                    row.classList.remove('dragging');
+                    clearDropIndicators();
+                    dragSrc = null;
+                });
+
+                row.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (!dragSrc || dragSrc === row) return;
+                    clearDropIndicators();
+                    const pos = getDropPosition(row, e.clientY);
+                    row.classList.add(pos === 'above' ? 'drop-above' : 'drop-below');
+                });
+
+                row.addEventListener('dragleave', (e) => {
+                    if (!row.contains(e.relatedTarget)) row.classList.remove('drop-above', 'drop-below');
+                });
+
+                row.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (!dragSrc || dragSrc === row) return;
+                    const pos = getDropPosition(row, e.clientY);
+                    clearDropIndicators();
+                    if (pos === 'above') {
+                        row.before(dragSrc);
+                    } else {
+                        row.after(dragSrc);
+                    }
+                });
+            }
 
             function openIconPicker(btn) {
                 if (activePicker) { activePicker.remove(); activePicker = null; }
@@ -714,6 +802,7 @@
                 iconBtn.addEventListener("click", () => openIconPicker(iconBtn));
 
                 row.innerHTML = `
+                    <span class="drag-handle material-symbols-outlined">drag_indicator</span>
                     <span></span>
                     <input type="text" value="${esc(project.label)}" placeholder="Label">
                     <input type="text" value="${esc(project.windowTitle)}" placeholder="Part of VS Code window title">
@@ -721,7 +810,8 @@
                     <input type="text" value="${esc(project.hotkey)}" placeholder="e.g. Alt+1">
                     <button class="delete-btn" title="Remove" onclick="this.closest('.project-row').remove()">✕</button>
                 `;
-                row.firstElementChild.replaceWith(iconBtn);
+                row.children[1].replaceWith(iconBtn);
+                addDragHandlers(row);
                 return row;
             }
 
