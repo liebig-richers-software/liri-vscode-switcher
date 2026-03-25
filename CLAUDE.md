@@ -10,17 +10,18 @@ VSCode Switcher is a Windows-only Electron app — a slim always-on-top sidebar 
 - **koffi** — Win32 FFI (no native addon compilation needed)
 - **pnpm** — package manager
 - **electron-builder** — NSIS installer packaging
+- **Material Symbols Outlined** — icon font (loaded from Google Fonts at runtime)
 
 ## Key files
 
 ```
 src/
-  main.js          — Electron main process: Win32 API, window management, IPC, config, tray
-  preload.js       — Exposes safe IPC bridge to sidebar renderer
-  index.html       — Sidebar UI (vanilla JS, no framework)
-  config.html      — Config UI window
+  main.js           — Electron main process: Win32 API, window management, IPC, config, tray
+  preload.js        — Exposes safe IPC bridge to sidebar renderer
+  index.html        — Sidebar UI (vanilla JS, no framework)
+  config.html       — Config UI window
   config-preload.js — IPC bridge for config window
-config.json        — Default config, copied to userData on first launch
+config.json         — Default config, copied to userData on first launch
 ```
 
 ## Dev commands
@@ -40,6 +41,23 @@ Window state polling runs every 500ms via `setInterval` — it enumerates visibl
 
 Config is stored in `app.getPath("userData")/config.json`. The default config at `config.json` (project root) is copied on first launch.
 
+## Icon system
+
+Icons are stored in `config.json` per project as either:
+- A **Material Symbol name** (e.g. `"folder"`, `"receipt_long"`) — rendered via the Material Symbols Outlined font
+- A legacy **emoji character** — still supported for backwards compatibility
+
+Detection via `isSymbolName(icon)`: returns true if the value matches `/^[a-z][a-z0-9_]*$/`.
+
+The icon picker in `config.html` shows a searchable grid of Material Symbol icons with German/English keyword search. The `ICONS` array contains `[name, keywords]` tuples. Each project's icon color in the sidebar uses `--project-color` (the project's accent color).
+
+## Config UI
+
+- Per-project fields: icon, label, window title fragment, accent color, optional hotkey
+- Icon picker: searchable, opens as a floating panel clamped to the viewport
+- Row reordering: drag via the `drag_indicator` handle; a blue insertion line shows the drop target position
+- Save writes to `userData/config.json` and triggers a live update in the sidebar via IPC
+
 ## Win32 integration
 
 All Win32 calls are in `src/main.js`. Key functions:
@@ -47,6 +65,12 @@ All Win32 calls are in `src/main.js`. Key functions:
 - `findWindowByTitle(fragment)` — iterates visible windows via `EnumWindows` callback
 - `getWindowState()` — returns which configured projects are open and any unconfigured VS Code windows
 
+## Tray icon
+
+Generated programmatically at startup via `makeTrayIconBuffer()` in `main.js` — builds a valid PNG in memory using Node's `zlib.deflateSync` and a hand-rolled CRC32. No external asset file needed.
+
 ## Known gotchas
 
 **Windows Defender / build lock:** `pnpm run build` creates `dist/win-unpacked/resources/app.asar` which Defender scans immediately on creation. If the build fails with `The process cannot access the file because it is being used by another process`, wait a few seconds for Defender to finish and retry. Adding the `dist/` folder to Defender exclusions (requires admin) prevents this permanently.
+
+**VS Code file watcher lock:** VS Code can hold `app.asar` open even with `files.watcherExclude` configured. The setting requires a full VS Code restart (not just Reload Window) to take effect. Close VS Code completely before running `pnpm run build` if the lock persists.
