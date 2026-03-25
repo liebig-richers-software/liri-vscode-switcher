@@ -45,7 +45,7 @@ function findWindowByTitle(fragment) {
     const cb = koffi.register((hwnd, _lParam) => {
         if (!_IsWindowVisible(hwnd)) return true;
         const title = getWindowTitle(hwnd);
-        if (title.includes(fragment)) {
+        if (title.includes("Visual Studio Code") && title.includes(fragment)) {
             found = hwnd;
             return false;
         }
@@ -104,7 +104,7 @@ function getWindowState() {
     koffi.unregister(cb);
 
     const openIds = config.projects
-        .filter((p) => visibleTitles.some((t) => t.includes(p.windowTitle)))
+        .filter((p) => visibleTitles.some((t) => t.includes("Visual Studio Code") && t.includes(p.windowTitle)))
         .map((p) => p.id);
 
     const configuredFragments = config.projects.map((p) => p.windowTitle);
