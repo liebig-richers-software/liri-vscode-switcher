@@ -125,8 +125,9 @@ function checkActiveWindow() {
     const [wx, wy] = mainWindow.getPosition();
     const [ww, wh] = mainWindow.getSize();
     const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
+    const cursorAtEdge = cursor.x === 0 && cursor.y >= wy && cursor.y < wy + wh;
 
-    mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow });
+    mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

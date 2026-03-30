@@ -542,13 +542,14 @@
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
-            window.switcher.onActiveWindow(({ title, openIds, unpinnedWindows: wins, cursorInWindow }) => {
+            window.switcher.onActiveWindow(({ title, openIds, unpinnedWindows: wins, cursorInWindow, cursorAtEdge }) => {
                 activeWindowTitle = title;
                 openProjectIds = openIds;
                 const changed = JSON.stringify(wins) !== JSON.stringify(unpinnedWindows);
                 unpinnedWindows = wins ?? [];
                 updateActiveStates();
                 if (changed) renderUnpinnedButtons();
+                if (!sidebarVisible && cursorAtEdge) showSidebar();
                 if (sidebarVisible && !cursorInWindow) scheduleHide();
             });
 
