@@ -6,6 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "prebuild": "node -e \"try{require('child_process').execSync('taskkill /F /IM electron.exe /T',{stdio:'ignore'})}catch(e){}\"",
     "build": "electron-builder"
   },
   "keywords": [
@@ -30,8 +31,7 @@
     "appId": "de.lirisoft.vscode-switcher",
     "productName": "VSCode Switcher",
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": false,

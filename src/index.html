@@ -576,6 +576,7 @@
 
             function showSidebar() {
                 clearTimeout(hideTimer);
+                window.switcher.moveToTop();
                 if (!sidebarVisible) {
                     sidebarVisible = true;
                     window.switcher.setIgnoreMouse(false);

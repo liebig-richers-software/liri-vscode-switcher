@@ -371,6 +371,12 @@ ipcMain.on("set-ignore-mouse", (_, ignore) => {
     }
 });
 
+ipcMain.on("move-to-top", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.moveTop();
+    }
+});
+
 ipcMain.on("move-window", (_, y) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
