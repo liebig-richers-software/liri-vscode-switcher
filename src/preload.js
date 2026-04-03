@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("switcher", {
     getConfig: () => ipcRenderer.invoke("get-config"),
     focusProject: (id) => ipcRenderer.invoke("focus-project", id),
+    launchProject: (id) => ipcRenderer.invoke("launch-project", id),
     openConfig: () => ipcRenderer.invoke("open-config"),
     checkActiveWindow: () => ipcRenderer.invoke("check-active-window"),
     onActiveWindow: (cb) => ipcRenderer.on("active-window", (_, title) => cb(title)),

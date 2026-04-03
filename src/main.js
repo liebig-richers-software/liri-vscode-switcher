@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, Tray, Menu, nativeImage, dialog } = require("electron");
 const { exec } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -354,6 +354,15 @@ ipcMain.handle("focus-project", (_, projectId) => {
 
 ipcMain.handle("focus-window-by-title", (_, title) => focusWindowByTitle(title));
 
+ipcMain.handle("launch-project", (_, projectId) => {
+    const project = config.projects.find((p) => p.id === projectId);
+    if (!project?.path) return { success: false, reason: "no path configured" };
+    exec(`code "${project.path}"`, (err) => {
+        if (err) console.warn("Failed to launch VS Code:", err.message);
+    });
+    return { success: true };
+});
+
 ipcMain.handle("open-config-window", (_, prefill) => createConfigWindow(prefill ?? null));
 
 ipcMain.handle("save-config", (_, newConfig) => {
@@ -401,6 +410,13 @@ ipcMain.on("resize-window", (_, height) => {
 });
 
 ipcMain.on("close-config-window", () => configWindow?.close());
+
+ipcMain.handle("select-folder", async () => {
+    const result = await dialog.showOpenDialog(configWindow, {
+        properties: ["openDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
 
 ipcMain.handle("check-active-window", () => {
     const hwnd = _GetForegroundWindow();

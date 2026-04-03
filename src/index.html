@@ -178,14 +178,10 @@
 
             /* Unavailable (window not open) */
             .project-btn.unavailable {
-                opacity: 0.3;
-                cursor: default;
+                opacity: 0.35;
             }
             .project-btn.unavailable:hover::before {
-                opacity: 0;
-            }
-            .project-btn.unavailable:active {
-                transform: none;
+                opacity: 0.06;
             }
 
             /* Unpinned (unknown VS Code window) */
@@ -387,7 +383,6 @@
                     const available = openProjectIds.includes(btn.dataset.id);
                     btn.classList.toggle("active", btn.dataset.id === activeId);
                     btn.classList.toggle("unavailable", !available);
-                    btn.disabled = !available;
                 });
             }
 
@@ -401,11 +396,21 @@
 
             async function focusProject(id) {
                 const btn = document.querySelector(`.project-btn[data-id="${id}"]`);
-                if (btn?.disabled) return;
-                const result = await window.switcher.focusProject(id);
-                if (!result.success && btn) {
-                    btn.classList.add("not-found");
-                    setTimeout(() => btn.classList.remove("not-found"), 400);
+                const available = openProjectIds.includes(id);
+                if (available) {
+                    const result = await window.switcher.focusProject(id);
+                    if (!result.success && btn) {
+                        btn.classList.add("not-found");
+                        setTimeout(() => btn.classList.remove("not-found"), 400);
+                    }
+                } else {
+                    const project = config.projects.find((p) => p.id === id);
+                    if (project?.path) {
+                        await window.switcher.launchProject(id);
+                    } else if (btn) {
+                        btn.classList.add("not-found");
+                        setTimeout(() => btn.classList.remove("not-found"), 400);
+                    }
                 }
             }
 
