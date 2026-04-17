@@ -6,6 +6,7 @@ const koffi = require("koffi");
 
 let mainWindow;
 let configWindow = null;
+let launcherWindow = null;
 let tray;
 let config;
 let barHeight;
@@ -128,6 +129,10 @@ function checkActiveWindow() {
     const cursorAtEdge = cursor.x === 0 && cursor.y >= wy && cursor.y < wy + wh;
 
     mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
+
+    if (launcherWindow && !launcherWindow.isDestroyed()) {
+        launcherWindow.webContents.send("active-window", { openIds });
+    }
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -162,9 +167,12 @@ function createWindow() {
     const barWidth = config.width || 72;
     barHeight = calcBarHeight(config.projects.length);
 
+    // Note: don't clamp against initial `barHeight` — it overestimates, since the
+    // sidebar now only shows open projects. The `resize-window` handler re-clamps
+    // after the renderer measures actual height.
     let clampedY;
     if (config.barY != null) {
-        clampedY = Math.max(0, Math.min(config.barY, screenHeight - barHeight));
+        clampedY = Math.max(0, Math.min(config.barY, screenHeight - 40));
     } else {
         const offsetY = config.barOffsetY ?? 0;
         clampedY = Math.max(0, Math.min(Math.round(screenHeight * offsetY - barHeight / 2), screenHeight - barHeight));
@@ -204,7 +212,7 @@ function createConfigWindow(prefill = null) {
     }
 
     configWindow = new BrowserWindow({
-        width: 600,
+        width: 720,
         height: 620,
         title: "VSCode Switcher — Configure",
         resizable: true,
@@ -225,6 +233,49 @@ function createConfigWindow(prefill = null) {
             configWindow.webContents.send("prefill-project", prefill);
         });
     }
+}
+
+// ── Create launcher window ────────────────────────────────────────────────────
+
+function createLauncherWindow() {
+    if (launcherWindow && !launcherWindow.isDestroyed()) {
+        launcherWindow.focus();
+        return;
+    }
+
+    const barWidth = config.width || 72;
+    const [, wy] = mainWindow.getPosition();
+    const display = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = display.workAreaSize;
+
+    const launcherWidth = 360;
+    const launcherHeight = Math.min(480, screenHeight - 20);
+    const gap = 4;
+    const x = Math.min(barWidth + gap, screenWidth - launcherWidth);
+    const y = Math.max(10, Math.min(wy, screenHeight - launcherHeight - 10));
+
+    launcherWindow = new BrowserWindow({
+        width: launcherWidth,
+        height: launcherHeight,
+        x, y,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        movable: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, "launcher-preload.js"),
+        },
+    });
+
+    launcherWindow.loadFile(path.join(__dirname, "launcher.html"));
+    launcherWindow.on("blur", () => {
+        if (launcherWindow && !launcherWindow.isDestroyed()) launcherWindow.close();
+    });
+    launcherWindow.on("closed", () => { launcherWindow = null; });
 }
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
@@ -365,12 +416,19 @@ ipcMain.handle("launch-project", (_, projectId) => {
 
 ipcMain.handle("open-config-window", (_, prefill) => createConfigWindow(prefill ?? null));
 
+ipcMain.handle("open-launcher-window", () => createLauncherWindow());
+
+ipcMain.on("close-launcher-window", () => launcherWindow?.close());
+
 ipcMain.handle("save-config", (_, newConfig) => {
-    config = newConfig;
+    // Preserve runtime-managed window position — the config UI carries a stale
+    // snapshot from when it opened, and shouldn't clobber later drags.
+    config = { ...newConfig, barY: config.barY };
     fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
     registerHotkeys();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("config-updated", config);
     if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.send("config-updated", config);
+    if (launcherWindow && !launcherWindow.isDestroyed()) launcherWindow.webContents.send("config-updated", config);
     return { success: true };
 });
 
@@ -442,6 +500,7 @@ app.whenReady().then(() => {
             if (!filename || !/\.(html|css|js)$/.test(filename) || filename === "main.js") return;
             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
             if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.reload();
+            if (launcherWindow && !launcherWindow.isDestroyed()) launcherWindow.webContents.reload();
         });
     }
 });

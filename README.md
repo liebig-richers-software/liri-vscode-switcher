@@ -25,7 +25,7 @@ A slim, always-on-top sidebar for Windows that lets you switch between multiple 
 
 ```bash
 pnpm install
-pnpm start        # dev mode with hot-reload
+pnpm dev          # dev mode with hot-reload
 pnpm run build    # build NSIS installer → dist/
 ```
 

@@ -119,7 +119,7 @@
             /* ── Column headers ── */
             .col-headers {
                 display: grid;
-                grid-template-columns: 18px 52px 1fr 1fr 1fr 38px 80px 28px;
+                grid-template-columns: 18px 52px 1fr 110px 1fr 1fr 38px 80px 28px;
                 gap: 8px;
                 padding: 10px 20px 6px;
                 flex-shrink: 0;
@@ -160,7 +160,7 @@
 
             .project-row {
                 display: grid;
-                grid-template-columns: 18px 52px 1fr 1fr 1fr 38px 80px 28px;
+                grid-template-columns: 18px 52px 1fr 110px 1fr 1fr 38px 80px 28px;
                 gap: 8px;
                 align-items: center;
                 background: var(--surface);
@@ -416,6 +416,7 @@
             <div></div>
             <div class="col-label">Icon</div>
             <div class="col-label">Label</div>
+            <div class="col-label">Group</div>
             <div class="col-label">Window Title</div>
             <div class="col-label">Path</div>
             <div class="col-label">Color</div>
@@ -427,6 +428,8 @@
             <div class="project-list" id="project-list"></div>
             <button class="add-btn" onclick="addRow()">+ Add Project</button>
         </main>
+
+        <datalist id="groups-list"></datalist>
 
         <script>
             let config = null;
@@ -837,6 +840,7 @@
                     <span class="drag-handle material-symbols-outlined">drag_indicator</span>
                     <span></span>
                     <input type="text" value="${esc(project.label)}" placeholder="Label">
+                    <input type="text" value="${esc(project.group)}" placeholder="Group (optional)" list="groups-list">
                     <input type="text" value="${esc(project.windowTitle)}" placeholder="Part of VS Code window title">
                     <div class="path-cell"><input type="text" value="${esc(project.path)}" placeholder="Folder path (optional)"><button type="button" class="browse-btn" title="Browse…">📂</button></div>
                     <input type="color" value="${esc(project.color ?? "#3b82f6")}">
@@ -862,6 +866,7 @@
                 list.appendChild(row);
                 row.scrollIntoView({ behavior: "smooth", block: "nearest" });
                 row.querySelectorAll("input")[0].focus();
+                refreshGroupsList();
             }
 
             function collectProjects() {
@@ -870,19 +875,34 @@
                         const iconBtn = row.querySelector(".icon-btn");
                         const inputs = row.querySelectorAll("input");
                         const label = inputs[0].value.trim();
-                        const windowTitle = inputs[1].value.trim();
+                        const group = inputs[1].value.trim();
+                        const windowTitle = inputs[2].value.trim();
                         if (!label || !windowTitle) return null;
                         return {
                             id: row.dataset.id || label.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now().toString(36),
                             icon: iconBtn?.dataset.value || "folder",
                             label,
+                            group: group || undefined,
                             windowTitle,
-                            path: inputs[2].value.trim() || undefined,
-                            color: inputs[3].value,
-                            hotkey: inputs[4].value.trim() || undefined,
+                            path: inputs[3].value.trim() || undefined,
+                            color: inputs[4].value,
+                            hotkey: inputs[5].value.trim() || undefined,
                         };
                     })
                     .filter(Boolean);
+            }
+
+            function refreshGroupsList() {
+                const datalist = document.getElementById("groups-list");
+                const groups = new Set();
+                document.querySelectorAll(".project-row").forEach((row) => {
+                    const g = row.querySelectorAll("input")[1]?.value.trim();
+                    if (g) groups.add(g);
+                });
+                datalist.innerHTML = [...groups]
+                    .sort((a, b) => a.localeCompare(b))
+                    .map((g) => `<option value="${esc(g)}">`)
+                    .join("");
             }
 
             async function save() {
@@ -905,6 +925,11 @@
                 for (const p of config.projects) {
                     list.appendChild(makeRow(p));
                 }
+                refreshGroupsList();
+                list.addEventListener("input", (e) => {
+                    const inputs = e.target.closest(".project-row")?.querySelectorAll("input");
+                    if (inputs && e.target === inputs[1]) refreshGroupsList();
+                });
             }
 
             window.configUI.onPrefillProject((data) => {

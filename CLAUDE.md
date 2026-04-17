@@ -27,7 +27,7 @@ config.json         — Default config, copied to userData on first launch
 ## Dev commands
 
 ```bash
-pnpm start        # Run in dev mode (with hot-reload for HTML/CSS/JS changes)
+pnpm dev          # Run in dev mode (with hot-reload for HTML/CSS/JS changes)
 pnpm run build    # Build NSIS installer → dist/
 ```
 

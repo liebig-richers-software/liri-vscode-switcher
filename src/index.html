@@ -176,14 +176,6 @@
                 box-shadow: 0 0 8px var(--project-color);
             }
 
-            /* Unavailable (window not open) */
-            .project-btn.unavailable {
-                opacity: 0.35;
-            }
-            .project-btn.unavailable:hover::before {
-                opacity: 0.06;
-            }
-
             /* Unpinned (unknown VS Code window) */
             .project-btn.unpinned {
                 border-style: dashed;
@@ -301,6 +293,58 @@
                 opacity: 1;
             }
 
+            /* Project group label (shown above a group of projects sharing a "group" field) */
+            .project-group {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                width: 100%;
+            }
+            .project-group + .project-group {
+                margin-top: 4px;
+            }
+            .group-label {
+                font-size: 7.5px;
+                font-weight: 600;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: rgba(255, 255, 255, 0.95);
+                text-align: center;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                width: 56px;
+                padding: 2px 0 0;
+            }
+
+            /* Launcher (+) button — opens popup for inactive projects */
+            .launcher-btn {
+                width: 52px;
+                height: 36px;
+                border-radius: 8px;
+                background: transparent;
+                border: 1.5px dashed rgba(255, 255, 255, 0.18);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-dim);
+                font-size: 20px;
+                line-height: 1;
+                transition: all 0.15s;
+                -webkit-app-region: no-drag;
+                flex-shrink: 0;
+            }
+            .launcher-btn:hover {
+                color: var(--text-bright);
+                background: rgba(255, 255, 255, 0.05);
+                border-color: rgba(255, 255, 255, 0.35);
+            }
+            .launcher-btn:active {
+                transform: scale(0.95);
+            }
+
             /* Bottom settings button */
             .settings-btn {
                 width: 36px;
@@ -377,13 +421,58 @@
                 return null;
             }
 
-            function updateActiveStates() {
+            function hasInactiveProjects() {
+                if (!config) return false;
+                return config.projects.some((p) => !openProjectIds.includes(p.id));
+            }
+
+            function renderProjectButtons() {
+                const projects = document.getElementById("projects-container");
+                if (!projects || !config) return;
+                projects.innerHTML = "";
+
                 const activeId = getActiveProjectId();
-                document.querySelectorAll(".project-btn:not(.unpinned)").forEach((btn) => {
-                    const available = openProjectIds.includes(btn.dataset.id);
-                    btn.classList.toggle("active", btn.dataset.id === activeId);
-                    btn.classList.toggle("unavailable", !available);
-                });
+                const openProjects = config.projects.filter((p) => openProjectIds.includes(p.id));
+
+                // Bundle projects per group (order = first appearance). Duplicate group
+                // entries get merged so each group renders exactly once.
+                const groups = new Map();
+                for (const project of openProjects) {
+                    const grp = project.group || "";
+                    if (!groups.has(grp)) groups.set(grp, []);
+                    groups.get(grp).push(project);
+                }
+                for (const [grp, groupProjects] of groups) {
+                    const groupContainer = document.createElement("div");
+                    groupContainer.className = "project-group";
+                    if (grp) {
+                        const label = document.createElement("div");
+                        label.className = "group-label";
+                        label.textContent = grp;
+                        label.title = grp;
+                        groupContainer.appendChild(label);
+                    }
+                    for (const project of groupProjects) {
+                        const btn = document.createElement("button");
+                        btn.className = "project-btn" + (project.id === activeId ? " active" : "");
+                        btn.dataset.id = project.id;
+                        btn.style.setProperty("--project-color", project.color || "#666");
+                        btn.innerHTML = `
+                            ${iconHTML(project.icon || "folder")}
+                            <span class="project-label">${project.label}</span>
+                            ${project.hotkey ? `<span class="hotkey-badge">${getHotkeyShort(project.hotkey)}</span>` : ""}
+                            <span class="tooltip">${project.label}${project.hotkey ? ` · ${project.hotkey}` : ""}</span>
+                        `;
+                        btn.addEventListener("click", () => focusProject(project.id));
+                        groupContainer.appendChild(btn);
+                    }
+                    projects.appendChild(groupContainer);
+                }
+
+                const launcherBtn = document.getElementById("launcher-btn");
+                if (launcherBtn) launcherBtn.style.display = hasInactiveProjects() ? "" : "none";
+
+                syncWindowHeight();
             }
 
             // Extract a short label from a VS Code window title
@@ -396,21 +485,10 @@
 
             async function focusProject(id) {
                 const btn = document.querySelector(`.project-btn[data-id="${id}"]`);
-                const available = openProjectIds.includes(id);
-                if (available) {
-                    const result = await window.switcher.focusProject(id);
-                    if (!result.success && btn) {
-                        btn.classList.add("not-found");
-                        setTimeout(() => btn.classList.remove("not-found"), 400);
-                    }
-                } else {
-                    const project = config.projects.find((p) => p.id === id);
-                    if (project?.path) {
-                        await window.switcher.launchProject(id);
-                    } else if (btn) {
-                        btn.classList.add("not-found");
-                        setTimeout(() => btn.classList.remove("not-found"), 400);
-                    }
+                const result = await window.switcher.focusProject(id);
+                if (!result.success && btn) {
+                    btn.classList.add("not-found");
+                    setTimeout(() => btn.classList.remove("not-found"), 400);
                 }
             }
 
@@ -429,28 +507,21 @@
                 divider.className = "divider";
                 sidebar.appendChild(divider);
 
-                // Projects
+                // Projects (populated by renderProjectButtons)
                 const projects = document.createElement("div");
+                projects.id = "projects-container";
                 projects.className = "projects";
-
-                for (const project of config.projects) {
-                    const btn = document.createElement("button");
-                    btn.className = "project-btn";
-                    btn.dataset.id = project.id;
-                    btn.style.setProperty("--project-color", project.color || "#666");
-
-                    btn.innerHTML = `
-          ${iconHTML(project.icon || "folder")}
-          <span class="project-label">${project.label}</span>
-          ${project.hotkey ? `<span class="hotkey-badge">${getHotkeyShort(project.hotkey)}</span>` : ""}
-          <span class="tooltip">${project.label}${project.hotkey ? ` · ${project.hotkey}` : ""}</span>
-        `;
-
-                    btn.addEventListener("click", () => focusProject(project.id));
-                    projects.appendChild(btn);
-                }
-
                 sidebar.appendChild(projects);
+
+                // Launcher trigger (+) — opens popup with inactive projects
+                const launcherBtn = document.createElement("button");
+                launcherBtn.id = "launcher-btn";
+                launcherBtn.className = "launcher-btn";
+                launcherBtn.textContent = "+";
+                launcherBtn.title = "Launch another project";
+                launcherBtn.style.display = "none";
+                launcherBtn.addEventListener("click", () => window.switcher.openLauncherWindow());
+                sidebar.appendChild(launcherBtn);
 
                 // Container for unpinned (unknown) VS Code windows
                 const unpinnedContainer = document.createElement("div");
@@ -467,6 +538,7 @@
                 sidebar.appendChild(settingsBtn);
 
                 initDrag(logo);
+                renderProjectButtons();
                 renderUnpinnedButtons();
             }
 
@@ -534,26 +606,27 @@
 
             async function init() {
                 config = await window.switcher.getConfig();
-                renderSidebar();
 
                 // Initial active window check
                 const initial = await window.switcher.checkActiveWindow();
                 activeWindowTitle = initial.title;
                 openProjectIds = initial.openIds;
                 unpinnedWindows = initial.unpinnedWindows ?? [];
-                updateActiveStates();
-                renderUnpinnedButtons();
+
+                renderSidebar();
             }
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
             window.switcher.onActiveWindow(({ title, openIds, unpinnedWindows: wins, cursorInWindow, cursorAtEdge }) => {
+                const projectsChanged =
+                    JSON.stringify(openIds) !== JSON.stringify(openProjectIds) || title !== activeWindowTitle;
+                const unpinnedChanged = JSON.stringify(wins) !== JSON.stringify(unpinnedWindows);
                 activeWindowTitle = title;
                 openProjectIds = openIds;
-                const changed = JSON.stringify(wins) !== JSON.stringify(unpinnedWindows);
                 unpinnedWindows = wins ?? [];
-                updateActiveStates();
-                if (changed) renderUnpinnedButtons();
+                if (projectsChanged) renderProjectButtons();
+                if (unpinnedChanged) renderUnpinnedButtons();
                 if (!sidebarVisible && cursorAtEdge) showSidebar();
                 if (sidebarVisible && !cursorInWindow) scheduleHide();
             });

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("switcher", {
     saveWindowY: (y) => ipcRenderer.send("save-window-y", y),
     resizeWindow: (h) => ipcRenderer.send("resize-window", h),
     openConfigWindow: (prefill) => ipcRenderer.invoke("open-config-window", prefill),
+    openLauncherWindow: () => ipcRenderer.invoke("open-launcher-window"),
     focusWindowByTitle: (title) => ipcRenderer.invoke("focus-window-by-title", title),
     moveToTop: () => ipcRenderer.send("move-to-top"),
 });
