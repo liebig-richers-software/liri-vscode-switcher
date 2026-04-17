@@ -56,26 +56,35 @@
                 overflow: hidden;
             }
 
-            /* ── Header ── */
+            /* ── Header ──
+               Drag region — matches the Windows Controls Overlay height (48px).
+               Native min/max/close buttons are overlaid on the right by Electron;
+               we leave ~150px padding-right to stay clear of them. */
             header {
-                padding: 14px 20px;
+                height: 48px;
+                padding: 0 158px 0 20px;
                 border-bottom: 1px solid var(--border);
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 flex-shrink: 0;
                 background: rgba(255, 255, 255, 0.02);
+                -webkit-app-region: drag;
+                user-select: none;
             }
 
             header h1 {
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 600;
+                letter-spacing: 0.02em;
+                color: var(--text);
             }
 
             .header-right {
                 display: flex;
                 align-items: center;
                 gap: 10px;
+                -webkit-app-region: no-drag;
             }
 
             .save-feedback {
@@ -407,7 +416,6 @@
             <h1>Configure Projects</h1>
             <div class="header-right">
                 <span class="save-feedback" id="save-feedback">Saved ✓</span>
-                <button class="btn btn-secondary" onclick="window.configUI.closeWindow()">Close</button>
                 <button class="btn btn-primary" onclick="save()">Save</button>
             </div>
         </header>

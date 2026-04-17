@@ -216,6 +216,13 @@ function createConfigWindow(prefill = null) {
         height: 620,
         title: "VSCode Switcher — Configure",
         resizable: true,
+        backgroundColor: "#0d0d12",
+        titleBarStyle: "hidden",
+        titleBarOverlay: {
+            color: "#0d0d12",
+            symbolColor: "#ffffff",
+            height: 48,
+        },
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
