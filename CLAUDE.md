@@ -16,22 +16,22 @@ VSCode Switcher is a Windows-only Electron app — a slim always-on-top sidebar 
 
 ```
 src/
-  main.js           — Electron main process: Win32 API, window management, IPC, config, tray
-  preload.js        — Exposes safe IPC bridge to sidebar renderer
-  index.html        — Sidebar UI (vanilla JS, no framework)
-  config.html       — Config UI window
-  config-preload.js — IPC bridge for config window
-config.json         — Default config, copied to userData on first launch
+  main.js             — Electron main process: Win32 API, window management, IPC, config, tray, launcher
+  preload.js          — Exposes safe IPC bridge to sidebar renderer
+  index.html          — Sidebar UI (vanilla JS, no framework)
+  config.html         — Config UI window (frameless, native overlay controls)
+  config-preload.js   — IPC bridge for config window
+  launcher.html       — Launcher popup shown when clicking an inactive project
+  launcher-preload.js — IPC bridge for launcher popup
+config.json           — Default config, copied to userData on first launch
 ```
 
 ## Dev commands
 
 ```bash
-pnpm dev          # Run in dev mode (with hot-reload for HTML/CSS/JS changes)
+pnpm dev          # Run in dev mode — watches src/ and reloads renderer on .html/.css/.js changes (not main.js)
 pnpm run build    # Build NSIS installer → dist/
 ```
-
-Hot-reload in dev mode watches `src/` and reloads renderer windows on any `.html/.css/.js` change (except `main.js`).
 
 ## Architecture
 
@@ -53,10 +53,25 @@ The icon picker in `config.html` shows a searchable grid of Material Symbol icon
 
 ## Config UI
 
-- Per-project fields: icon, label, window title fragment, accent color, optional hotkey
-- Icon picker: searchable, opens as a floating panel clamped to the viewport
-- Row reordering: drag via the `drag_indicator` handle; a blue insertion line shows the drop target position
-- Save writes to `userData/config.json` and triggers a live update in the sidebar via IPC
+- Frameless window: `titleBarStyle: "hidden"` + `titleBarOverlay` for native minimize/close controls on a custom dark title bar
+- Per-project fields: icon, label, group (optional), window title fragment, folder path (optional), accent color, optional hotkey
+- Group autocomplete is fed by a `<datalist>` built from existing group names
+- Folder path triggers `code "<path>"` via `exec` when clicking an inactive project
+- **Autostart with Windows** toggle: writes/removes the app under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+- Save writes to `userData/config.json` and triggers a live update in the sidebar and launcher via IPC
+
+## Launcher popup
+
+- Opened from the sidebar when the user clicks an inactive project (no matching VS Code window open)
+- Lives in `launcher.html` / `launcher-preload.js`; created via `createLauncherWindow()` in `main.js`
+- Positioned next to the sidebar; auto-closes on blur
+- Lists all projects that have a `path` configured; clicking one launches VS Code and closes the popup
+
+## Project grouping & sidebar position
+
+- `group` field on each project — projects sharing the same group are rendered as a visual cluster in the sidebar; ungrouped projects sit on their own
+- `barOffsetY` (0…1) in `config.json` stores the sidebar's vertical center as a fraction of screen height — updated when the user drags the bar, preserved across restarts
+- The in-memory runtime position takes precedence over whatever the config UI last sent (see the comment at the `preserve runtime-managed window position` guard in `main.js`)
 
 ## Win32 integration
 
@@ -69,8 +84,3 @@ All Win32 calls are in `src/main.js`. Key functions:
 
 Generated programmatically at startup via `makeTrayIconBuffer()` in `main.js` — builds a valid PNG in memory using Node's `zlib.deflateSync` and a hand-rolled CRC32. No external asset file needed.
 
-## Known gotchas
-
-**Windows Defender / build lock:** `pnpm run build` creates `dist/win-unpacked/resources/app.asar` which Defender scans immediately on creation. If the build fails with `The process cannot access the file because it is being used by another process`, wait a few seconds for Defender to finish and retry. Adding the `dist/` folder to Defender exclusions (requires admin) prevents this permanently.
-
-**VS Code file watcher lock:** VS Code can hold `app.asar` open even with `files.watcherExclude` configured. The setting requires a full VS Code restart (not just Reload Window) to take effect. Close VS Code completely before running `pnpm run build` if the lock persists.
