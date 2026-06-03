@@ -15,6 +15,7 @@ let barHeight;
 
 const user32 = koffi.load("user32.dll");
 const kernel32 = koffi.load("kernel32.dll");
+const dwmapi = koffi.load("dwmapi.dll");
 
 const WNDENUMPROC = koffi.proto("bool __stdcall WNDENUMPROC(void* hWnd, void* lParam)");
 
@@ -33,6 +34,15 @@ const _AttachThreadInput = user32.func(
     "bool    __stdcall AttachThreadInput(uint32 idAttach, uint32 idAttachTo, bool fAttach)",
 );
 const _GetCurrentThreadId = kernel32.func("uint32 __stdcall GetCurrentThreadId()");
+const _GetWindowRect = user32.func("bool    __stdcall GetWindowRect(void* hWnd, _Out_ void* lpRect)");
+const _GetWindowLongW = user32.func("int32   __stdcall GetWindowLongW(void* hWnd, int nIndex)");
+const _DwmGetWindowAttribute = dwmapi.func(
+    "int32   __stdcall DwmGetWindowAttribute(void* hWnd, uint32 dwAttribute, _Out_ void* pvAttribute, uint32 cbAttribute)",
+);
+
+const DWMWA_CLOAKED = 14;
+const GWL_EXSTYLE = -20;
+const WS_EX_TOOLWINDOW = 0x00000080;
 
 function getWindowTitle(hwnd) {
     const buf = Buffer.alloc(1024);
@@ -41,10 +51,34 @@ function getWindowTitle(hwnd) {
     return buf.slice(0, len * 2).toString("utf16le");
 }
 
+// Filter out phantom windows that pass IsWindowVisible but aren't real top-level
+// app windows — most notably Chromium's DWM-cloaked "Jump List" helper window,
+// which VS Code/Electron create and which would otherwise show as a ghost entry.
+function isRealWindow(hwnd) {
+    // DWM-cloaked: visible to EnumWindows but not actually rendered.
+    const cloakedBuf = Buffer.alloc(4);
+    if (_DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloakedBuf, 4) === 0 && cloakedBuf.readUInt32LE(0) !== 0) {
+        return false;
+    }
+
+    // Tool windows never represent a normal editor window.
+    const exStyle = _GetWindowLongW(hwnd, GWL_EXSTYLE) >>> 0;
+    if (exStyle & WS_EX_TOOLWINDOW) return false;
+
+    // Zero-area windows are helper/message windows, not real UI.
+    const rect = Buffer.alloc(16);
+    if (!_GetWindowRect(hwnd, rect)) return false;
+    const width = rect.readInt32LE(8) - rect.readInt32LE(0);
+    const height = rect.readInt32LE(12) - rect.readInt32LE(4);
+    if (width <= 0 || height <= 0) return false;
+
+    return true;
+}
+
 function findWindowByTitle(fragment) {
     let found = null;
     const cb = koffi.register((hwnd, _lParam) => {
-        if (!_IsWindowVisible(hwnd)) return true;
+        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return true;
         const title = getWindowTitle(hwnd);
         if (title.includes("Visual Studio Code") && title.includes(fragment)) {
             found = hwnd;
@@ -52,8 +86,13 @@ function findWindowByTitle(fragment) {
         }
         return true;
     }, koffi.pointer(WNDENUMPROC));
-    _EnumWindows(cb, null);
-    koffi.unregister(cb);
+    // Always unregister the callback, even if enumeration throws — otherwise the
+    // koffi callback pool slowly fills up and eventually crashes the process.
+    try {
+        _EnumWindows(cb, null);
+    } finally {
+        koffi.unregister(cb);
+    }
     return found;
 }
 
@@ -96,13 +135,17 @@ function calcBarHeight(pinnedCount, unpinnedCount = 0) {
 function getWindowState() {
     const visibleTitles = [];
     const cb = koffi.register((hwnd, _lParam) => {
-        if (!_IsWindowVisible(hwnd)) return true;
+        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return true;
         const title = getWindowTitle(hwnd);
         if (title) visibleTitles.push(title);
         return true;
     }, koffi.pointer(WNDENUMPROC));
-    _EnumWindows(cb, null);
-    koffi.unregister(cb);
+    // Always unregister, even on error — see note in findWindowByTitle.
+    try {
+        _EnumWindows(cb, null);
+    } finally {
+        koffi.unregister(cb);
+    }
 
     const openIds = config.projects
         .filter((p) => visibleTitles.some((t) => t.includes("Visual Studio Code") && t.includes(p.windowTitle)))
@@ -118,20 +161,27 @@ function getWindowState() {
 
 function checkActiveWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    const hwnd = _GetForegroundWindow();
-    const title = hwnd ? getWindowTitle(hwnd) : "";
-    const { openIds, unpinnedWindows } = getWindowState();
+    // Guard the whole tick: a transient Win32/FFI failure must never bubble up
+    // out of setInterval, where it would become an uncaught exception and kill
+    // the app silently.
+    try {
+        const hwnd = _GetForegroundWindow();
+        const title = hwnd ? getWindowTitle(hwnd) : "";
+        const { openIds, unpinnedWindows } = getWindowState();
 
-    const cursor = screen.getCursorScreenPoint();
-    const [wx, wy] = mainWindow.getPosition();
-    const [ww, wh] = mainWindow.getSize();
-    const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
-    const cursorAtEdge = cursor.x === 0 && cursor.y >= wy && cursor.y < wy + wh;
+        const cursor = screen.getCursorScreenPoint();
+        const [wx, wy] = mainWindow.getPosition();
+        const [ww, wh] = mainWindow.getSize();
+        const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
+        const cursorAtEdge = cursor.x === 0 && cursor.y >= wy && cursor.y < wy + wh;
 
-    mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
+        mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
 
-    if (launcherWindow && !launcherWindow.isDestroyed()) {
-        launcherWindow.webContents.send("active-window", { openIds });
+        if (launcherWindow && !launcherWindow.isDestroyed()) {
+            launcherWindow.webContents.send("active-window", { openIds });
+        }
+    } catch (e) {
+        console.error("checkActiveWindow failed:", e);
     }
 }
 
@@ -491,6 +541,11 @@ ipcMain.handle("check-active-window", () => {
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
+
+// Last-resort safety net: keep the tray app alive on stray errors instead of
+// vanishing without a trace. Anything reaching here is a bug worth logging.
+process.on("uncaughtException", (e) => console.error("uncaughtException:", e));
+process.on("unhandledRejection", (e) => console.error("unhandledRejection:", e));
 
 app.whenReady().then(() => {
     loadConfig();
