@@ -44,6 +44,12 @@ const DWMWA_CLOAKED = 14;
 const GWL_EXSTYLE = -20;
 const WS_EX_TOOLWINDOW = 0x00000080;
 
+// Reused across isRealWindow() calls — it runs once per window on every 500ms
+// poll, so per-call Buffer.alloc would only create GC churn. Enumeration is
+// synchronous and single-threaded, so sharing these is safe.
+const _cloakedBuf = Buffer.alloc(4);
+const _rectBuf = Buffer.alloc(16);
+
 function getWindowTitle(hwnd) {
     const buf = Buffer.alloc(1024);
     const len = _GetWindowTextW(hwnd, buf, 512);
@@ -56,8 +62,7 @@ function getWindowTitle(hwnd) {
 // which VS Code/Electron create and which would otherwise show as a ghost entry.
 function isRealWindow(hwnd) {
     // DWM-cloaked: visible to EnumWindows but not actually rendered.
-    const cloakedBuf = Buffer.alloc(4);
-    if (_DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloakedBuf, 4) === 0 && cloakedBuf.readUInt32LE(0) !== 0) {
+    if (_DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, _cloakedBuf, 4) === 0 && _cloakedBuf.readUInt32LE(0) !== 0) {
         return false;
     }
 
@@ -66,33 +71,37 @@ function isRealWindow(hwnd) {
     if (exStyle & WS_EX_TOOLWINDOW) return false;
 
     // Zero-area windows are helper/message windows, not real UI.
-    const rect = Buffer.alloc(16);
-    if (!_GetWindowRect(hwnd, rect)) return false;
-    const width = rect.readInt32LE(8) - rect.readInt32LE(0);
-    const height = rect.readInt32LE(12) - rect.readInt32LE(4);
+    if (!_GetWindowRect(hwnd, _rectBuf)) return false;
+    const width = _rectBuf.readInt32LE(8) - _rectBuf.readInt32LE(0);
+    const height = _rectBuf.readInt32LE(12) - _rectBuf.readInt32LE(4);
     if (width <= 0 || height <= 0) return false;
 
     return true;
 }
 
-function findWindowByTitle(fragment) {
-    let found = null;
-    const cb = koffi.register((hwnd, _lParam) => {
-        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return true;
-        const title = getWindowTitle(hwnd);
-        if (title.includes("Visual Studio Code") && title.includes(fragment)) {
-            found = hwnd;
-            return false;
-        }
-        return true;
-    }, koffi.pointer(WNDENUMPROC));
-    // Always unregister the callback, even if enumeration throws — otherwise the
-    // koffi callback pool slowly fills up and eventually crashes the process.
+// Enumerate top-level windows, invoking visit(hwnd) for each. Return false from
+// visit to stop early (mirrors the Win32 EnumWindows contract); any other value
+// continues. The koffi callback is always unregistered, even if enumeration
+// throws — otherwise the callback pool slowly fills up and crashes the process.
+function enumWindows(visit) {
+    const cb = koffi.register((hwnd, _lParam) => visit(hwnd) !== false, koffi.pointer(WNDENUMPROC));
     try {
         _EnumWindows(cb, null);
     } finally {
         koffi.unregister(cb);
     }
+}
+
+function findWindowByTitle(fragment) {
+    let found = null;
+    enumWindows((hwnd) => {
+        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return;
+        const title = getWindowTitle(hwnd);
+        if (title.includes("Visual Studio Code") && title.includes(fragment)) {
+            found = hwnd;
+            return false; // stop enumeration
+        }
+    });
     return found;
 }
 
@@ -134,18 +143,11 @@ function calcBarHeight(pinnedCount, unpinnedCount = 0) {
 
 function getWindowState() {
     const visibleTitles = [];
-    const cb = koffi.register((hwnd, _lParam) => {
-        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return true;
+    enumWindows((hwnd) => {
+        if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return;
         const title = getWindowTitle(hwnd);
         if (title) visibleTitles.push(title);
-        return true;
-    }, koffi.pointer(WNDENUMPROC));
-    // Always unregister, even on error — see note in findWindowByTitle.
-    try {
-        _EnumWindows(cb, null);
-    } finally {
-        koffi.unregister(cb);
-    }
+    });
 
     const openIds = config.projects
         .filter((p) => visibleTitles.some((t) => t.includes("Visual Studio Code") && t.includes(p.windowTitle)))
