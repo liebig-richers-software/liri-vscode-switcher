@@ -549,25 +549,49 @@ ipcMain.handle("check-active-window", () => {
 process.on("uncaughtException", (e) => console.error("uncaughtException:", e));
 process.on("unhandledRejection", (e) => console.error("unhandledRejection:", e));
 
-app.whenReady().then(() => {
-    loadConfig();
-    createWindow();
-    createTray();
-    registerHotkeys();
+const isDev = !app.isPackaged;
 
-    setInterval(checkActiveWindow, 500);
+// In dev we want several instances side by side for testing. Give each its own
+// cache dir so they don't fight over the shared Chromium cache ("Unable to move
+// the cache: Access is denied") — config in userData stays shared, so every
+// instance still sees the real projects.
+if (isDev) {
+    app.setPath("sessionData", path.join(app.getPath("temp"), `vscode-switcher-session-${process.pid}`));
+}
 
-    // ── Dev: hot-reload renderer on HTML/CSS/JS changes ───────────────────────
-    if (!app.isPackaged) {
-        const { watch } = require("fs");
-        watch(__dirname, (_, filename) => {
-            if (!filename || !/\.(html|css|js)$/.test(filename) || filename === "main.js") return;
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
-            if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.reload();
-            if (launcherWindow && !launcherWindow.isDestroyed()) launcherWindow.webContents.reload();
+// A packaged build runs single-instance: a second launch would double-register
+// the global hotkeys, so just resurface the running one instead.
+const hasLock = isDev || app.requestSingleInstanceLock();
+
+if (!hasLock) {
+    app.quit();
+} else {
+    if (!isDev) {
+        app.on("second-instance", () => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
         });
     }
-});
+
+    app.whenReady().then(() => {
+        loadConfig();
+        createWindow();
+        createTray();
+        registerHotkeys();
+
+        setInterval(checkActiveWindow, 500);
+
+        // ── Dev: hot-reload renderer on HTML/CSS/JS changes ───────────────────
+        if (!app.isPackaged) {
+            const { watch } = require("fs");
+            watch(__dirname, (_, filename) => {
+                if (!filename || !/\.(html|css|js)$/.test(filename) || filename === "main.js") return;
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
+                if (configWindow && !configWindow.isDestroyed()) configWindow.webContents.reload();
+                if (launcherWindow && !launcherWindow.isDestroyed()) launcherWindow.webContents.reload();
+            });
+        }
+    });
+}
 
 app.on("will-quit", () => {
     globalShortcut.unregisterAll();
