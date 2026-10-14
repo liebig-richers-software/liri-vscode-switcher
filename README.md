@@ -42,7 +42,7 @@ Click the ⚙ button at the bottom of the sidebar to open the config window.
 | Icon | Material Symbol — click to open the searchable picker |
 | Label | Short name shown below the icon |
 | Group | Optional group name — grouped projects are separated visually in the sidebar; autocomplete suggests existing groups |
-| Window Title | Substring matched against the VS Code window title |
+| Window Title | Substring matched against the workspace part of the VS Code window title |
 | Folder Path | Optional — when set, clicking an inactive project launches `code "<path>"` |
 | Color | Accent color for the button and icon |
 | Hotkey | Optional global hotkey, e.g. `Alt+1` |
@@ -59,7 +59,7 @@ VS Code window titles follow the pattern:
 <file> — <project> — Visual Studio Code
 ```
 
-Set **Window Title** to any unique substring of your project name. The app polls open windows every 500ms and highlights the currently focused one.
+Set **Window Title** to any unique substring of your project name. Only the `<project>` part is matched — an open file whose name contains another project's name doesn't count. The app polls open windows every 500ms and highlights the currently focused one.
 
 ## Known issues
 

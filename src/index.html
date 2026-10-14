@@ -386,7 +386,7 @@
 
         <script>
             let config = null;
-            let activeWindowTitle = "";
+            let activeProjectId = null;
             let openProjectIds = [];
             let unpinnedWindows = [];
 
@@ -413,14 +413,6 @@
                 return hotkey.replace("Alt+", "⌥").replace("Ctrl+", "⌃").replace("Shift+", "⇧");
             }
 
-            function getActiveProjectId() {
-                if (!config) return null;
-                for (const p of config.projects) {
-                    if (activeWindowTitle.includes(p.windowTitle)) return p.id;
-                }
-                return null;
-            }
-
             function hasInactiveProjects() {
                 if (!config) return false;
                 return config.projects.some((p) => !openProjectIds.includes(p.id));
@@ -431,7 +423,6 @@
                 if (!projects || !config) return;
                 projects.innerHTML = "";
 
-                const activeId = getActiveProjectId();
                 const openProjects = config.projects.filter((p) => openProjectIds.includes(p.id));
 
                 // Bundle projects per group (order = first appearance). Duplicate group
@@ -454,7 +445,7 @@
                     }
                     for (const project of groupProjects) {
                         const btn = document.createElement("button");
-                        btn.className = "project-btn" + (project.id === activeId ? " active" : "");
+                        btn.className = "project-btn" + (project.id === activeProjectId ? " active" : "");
                         btn.dataset.id = project.id;
                         btn.style.setProperty("--project-color", project.color || "#666");
                         btn.innerHTML = `
@@ -609,7 +600,7 @@
 
                 // Initial active window check
                 const initial = await window.switcher.checkActiveWindow();
-                activeWindowTitle = initial.title;
+                activeProjectId = initial.activeId;
                 openProjectIds = initial.openIds;
                 unpinnedWindows = initial.unpinnedWindows ?? [];
 
@@ -618,11 +609,11 @@
 
             // ── Event listeners ───────────────────────────────────────────────────────
 
-            window.switcher.onActiveWindow(({ title, openIds, unpinnedWindows: wins, cursorInWindow, cursorAtEdge }) => {
+            window.switcher.onActiveWindow(({ activeId, openIds, unpinnedWindows: wins, cursorInWindow, cursorAtEdge }) => {
                 const projectsChanged =
-                    JSON.stringify(openIds) !== JSON.stringify(openProjectIds) || title !== activeWindowTitle;
+                    JSON.stringify(openIds) !== JSON.stringify(openProjectIds) || activeId !== activeProjectId;
                 const unpinnedChanged = JSON.stringify(wins) !== JSON.stringify(unpinnedWindows);
-                activeWindowTitle = title;
+                activeProjectId = activeId;
                 openProjectIds = openIds;
                 unpinnedWindows = wins ?? [];
                 if (projectsChanged) renderProjectButtons();

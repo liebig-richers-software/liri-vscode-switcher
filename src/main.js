@@ -92,12 +92,27 @@ function enumWindows(visit) {
     }
 }
 
+// VS Code titles read "<editor> - <workspace> - Visual Studio Code" (the editor
+// part is missing when nothing is open). Only the workspace part identifies the
+// project — a whole-title match lets an open file like "nsi-core-notes.md" claim
+// the nsi-architecture window for nsi-core.
+function titleMatches(title, fragment) {
+    const m = title.match(/^(.*)\s[—–-]\s*Visual Studio Code/);
+    if (!m) return false;
+    const parts = m[1].split(/\s[—–-]\s/);
+    return parts.slice(parts.length > 1 ? 1 : 0).some((part) => part.includes(fragment));
+}
+
+function findProjectIdByTitle(title) {
+    return config.projects.find((p) => titleMatches(title, p.windowTitle))?.id ?? null;
+}
+
 function findWindowByTitle(fragment) {
     let found = null;
     enumWindows((hwnd) => {
         if (!_IsWindowVisible(hwnd) || !isRealWindow(hwnd)) return;
         const title = getWindowTitle(hwnd);
-        if (title.includes("Visual Studio Code") && title.includes(fragment)) {
+        if (titleMatches(title, fragment)) {
             found = hwnd;
             return false; // stop enumeration
         }
@@ -150,12 +165,11 @@ function getWindowState() {
     });
 
     const openIds = config.projects
-        .filter((p) => visibleTitles.some((t) => t.includes("Visual Studio Code") && t.includes(p.windowTitle)))
+        .filter((p) => visibleTitles.some((t) => titleMatches(t, p.windowTitle)))
         .map((p) => p.id);
 
-    const configuredFragments = config.projects.map((p) => p.windowTitle);
     const unpinnedWindows = visibleTitles
-        .filter((t) => t.includes("Visual Studio Code") && !configuredFragments.some((f) => t.includes(f)))
+        .filter((t) => t.includes("Visual Studio Code") && !findProjectIdByTitle(t))
         .map((t) => ({ title: t }));
 
     return { openIds, unpinnedWindows };
@@ -177,7 +191,8 @@ function checkActiveWindow() {
         const cursorInWindow = cursor.x >= wx && cursor.x < wx + ww && cursor.y >= wy && cursor.y < wy + wh;
         const cursorAtEdge = cursor.x === 0 && cursor.y >= wy && cursor.y < wy + wh;
 
-        mainWindow.webContents.send("active-window", { title, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
+        const activeId = findProjectIdByTitle(title);
+        mainWindow.webContents.send("active-window", { activeId, openIds, unpinnedWindows, cursorInWindow, cursorAtEdge });
 
         if (launcherWindow && !launcherWindow.isDestroyed()) {
             launcherWindow.webContents.send("active-window", { openIds });
@@ -539,7 +554,7 @@ ipcMain.handle("check-active-window", () => {
     const hwnd = _GetForegroundWindow();
     const title = hwnd ? getWindowTitle(hwnd) : "";
     const { openIds, unpinnedWindows } = getWindowState();
-    return { title, openIds, unpinnedWindows };
+    return { activeId: findProjectIdByTitle(title), openIds, unpinnedWindows };
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
