@@ -17,44 +17,52 @@ const user32 = koffi.load("user32.dll");
 const kernel32 = koffi.load("kernel32.dll");
 const dwmapi = koffi.load("dwmapi.dll");
 
-const WNDENUMPROC = koffi.proto("bool __stdcall WNDENUMPROC(void* hWnd, void* lParam)");
+// Window handles are plain integers, not void*: koffi wraps every void* it hands
+// to JS in an External, and the poll creates hundreds of those per tick (one per
+// enumerated window). Electron's V8 only reclaims them on a major GC, which our
+// tiny heap never triggers — so they piled up (~30 MB/h) until the main process
+// crashed after ~35h. Numbers carry no native allocation at all.
+koffi.alias("HWND", "intptr_t");
 
-const _EnumWindows = user32.func("bool    __stdcall EnumWindows(WNDENUMPROC* lpEnumFunc, void* lParam)");
-const _IsWindowVisible = user32.func("bool    __stdcall IsWindowVisible(void* hWnd)");
-const _GetWindowTextW = user32.func("int     __stdcall GetWindowTextW(void* hWnd, void* lpString, int nMaxCount)");
-const _SetForegroundWindow = user32.func("bool    __stdcall SetForegroundWindow(void* hWnd)");
-const _BringWindowToTop = user32.func("bool    __stdcall BringWindowToTop(void* hWnd)");
-const _ShowWindow = user32.func("bool    __stdcall ShowWindow(void* hWnd, int nCmdShow)");
-const _IsIconic = user32.func("bool    __stdcall IsIconic(void* hWnd)");
-const _GetForegroundWindow = user32.func("void*   __stdcall GetForegroundWindow()");
+const WNDENUMPROC = koffi.proto("bool __stdcall WNDENUMPROC(HWND hWnd, intptr_t lParam)");
+
+const _EnumWindows = user32.func("bool    __stdcall EnumWindows(WNDENUMPROC* lpEnumFunc, intptr_t lParam)");
+const _IsWindowVisible = user32.func("bool    __stdcall IsWindowVisible(HWND hWnd)");
+const _GetWindowTextW = user32.func("int     __stdcall GetWindowTextW(HWND hWnd, void* lpString, int nMaxCount)");
+const _SetForegroundWindow = user32.func("bool    __stdcall SetForegroundWindow(HWND hWnd)");
+const _BringWindowToTop = user32.func("bool    __stdcall BringWindowToTop(HWND hWnd)");
+const _ShowWindow = user32.func("bool    __stdcall ShowWindow(HWND hWnd, int nCmdShow)");
+const _IsIconic = user32.func("bool    __stdcall IsIconic(HWND hWnd)");
+const _GetForegroundWindow = user32.func("HWND    __stdcall GetForegroundWindow()");
 const _GetWindowThreadProcessId = user32.func(
-    "uint32 __stdcall GetWindowThreadProcessId(void* hWnd, void* lpdwProcessId)",
+    "uint32 __stdcall GetWindowThreadProcessId(HWND hWnd, void* lpdwProcessId)",
 );
 const _AttachThreadInput = user32.func(
     "bool    __stdcall AttachThreadInput(uint32 idAttach, uint32 idAttachTo, bool fAttach)",
 );
 const _GetCurrentThreadId = kernel32.func("uint32 __stdcall GetCurrentThreadId()");
-const _GetWindowRect = user32.func("bool    __stdcall GetWindowRect(void* hWnd, _Out_ void* lpRect)");
-const _GetWindowLongW = user32.func("int32   __stdcall GetWindowLongW(void* hWnd, int nIndex)");
+const _GetWindowRect = user32.func("bool    __stdcall GetWindowRect(HWND hWnd, _Out_ void* lpRect)");
+const _GetWindowLongW = user32.func("int32   __stdcall GetWindowLongW(HWND hWnd, int nIndex)");
 const _DwmGetWindowAttribute = dwmapi.func(
-    "int32   __stdcall DwmGetWindowAttribute(void* hWnd, uint32 dwAttribute, _Out_ void* pvAttribute, uint32 cbAttribute)",
+    "int32   __stdcall DwmGetWindowAttribute(HWND hWnd, uint32 dwAttribute, _Out_ void* pvAttribute, uint32 cbAttribute)",
 );
 
 const DWMWA_CLOAKED = 14;
 const GWL_EXSTYLE = -20;
 const WS_EX_TOOLWINDOW = 0x00000080;
 
-// Reused across isRealWindow() calls — it runs once per window on every 500ms
-// poll, so per-call Buffer.alloc would only create GC churn. Enumeration is
-// synchronous and single-threaded, so sharing these is safe.
+// Reused across isRealWindow()/getWindowTitle() calls — they run once per window
+// on every 500ms poll, and each fresh Buffer is another native allocation only a
+// major GC frees (see HWND above). All callers run synchronously on the main
+// thread and copy out before returning, so sharing these is safe.
 const _cloakedBuf = Buffer.alloc(4);
 const _rectBuf = Buffer.alloc(16);
+const _titleBuf = Buffer.alloc(1024);
 
 function getWindowTitle(hwnd) {
-    const buf = Buffer.alloc(1024);
-    const len = _GetWindowTextW(hwnd, buf, 512);
+    const len = _GetWindowTextW(hwnd, _titleBuf, 512);
     if (len <= 0) return "";
-    return buf.slice(0, len * 2).toString("utf16le");
+    return _titleBuf.toString("utf16le", 0, len * 2);
 }
 
 // Filter out phantom windows that pass IsWindowVisible but aren't real top-level
@@ -86,7 +94,7 @@ function isRealWindow(hwnd) {
 function enumWindows(visit) {
     const cb = koffi.register((hwnd, _lParam) => visit(hwnd) !== false, koffi.pointer(WNDENUMPROC));
     try {
-        _EnumWindows(cb, null);
+        _EnumWindows(cb, 0);
     } finally {
         koffi.unregister(cb);
     }
